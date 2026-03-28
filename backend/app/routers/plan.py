@@ -20,9 +20,13 @@ def get_plan(month: str | None = None, db: Session = Depends(get_db)):
             "total_bills": dashboard["total_bills"],
             "total_allowances": dashboard["total_allowances"],
             "total_spent_in_allowance_categories": dashboard["total_spent_in_allowance_categories"],
+            "remaining_budget_to_reserve_total": dashboard["remaining_budget_to_reserve_total"],
+            "over_budget_total": dashboard["over_budget_total"],
+            "categories_over_budget_count": dashboard["categories_over_budget_count"],
             "buffer_after_bills": dashboard["buffer_after_bills"],
             "safe_to_spend_after_budgeted_categories": dashboard["safe_to_spend_after_budgeted_categories"],
             "buffer_after_actual_spending": dashboard["buffer_after_actual_spending"],
+            "available_to_spend_right_now": dashboard["available_to_spend_right_now"],
             "remaining_per_category": dashboard["remaining_per_category"],
         }
     except ValueError as error:

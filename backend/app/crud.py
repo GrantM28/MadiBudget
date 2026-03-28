@@ -1,6 +1,7 @@
 from calendar import monthrange
 from datetime import date
 from decimal import Decimal
+from math import ceil, floor
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -36,6 +37,49 @@ def _month_bounds(month: str | None) -> tuple[date, date, str]:
     end = date(year, month_number, last_day)
     label = f"{year:04d}-{month_number:02d}"
     return start, end, label
+
+
+def _average_monthly_income(amount: Decimal, frequency: str) -> Decimal:
+    if frequency == "weekly":
+        return amount * Decimal("52") / Decimal("12")
+    if frequency == "biweekly":
+        return amount * Decimal("26") / Decimal("12")
+    return amount
+
+
+def _paychecks_in_month(
+    start: date,
+    end: date,
+    payday_reference_date: date | None,
+    frequency: str,
+) -> int | None:
+    if not payday_reference_date:
+        return None
+
+    interval_days = {"weekly": 7, "biweekly": 14}.get(frequency)
+    if not interval_days:
+        return 1 if frequency == "monthly" else None
+
+    first_index = ceil((start - payday_reference_date).days / interval_days)
+    last_index = floor((end - payday_reference_date).days / interval_days)
+    return max(0, last_index - first_index + 1)
+
+
+def _income_source_monthly_amount(
+    income: models.IncomeSource,
+    start: date,
+    end: date,
+) -> Decimal:
+    amount = Decimal(income.amount)
+    paychecks = _paychecks_in_month(start, end, income.payday_reference_date, income.frequency)
+
+    if paychecks is None:
+        return _average_monthly_income(amount, income.frequency)
+
+    if income.frequency in {"weekly", "biweekly"}:
+        return amount * paychecks
+
+    return amount
 
 
 def list_incomes(db: Session):
@@ -315,13 +359,7 @@ def calculate_dashboard(db: Session, month: str | None = None):
 
     recurring_monthly_income = ZERO
     for income in incomes:
-        amount = Decimal(income.amount)
-        if income.frequency == "weekly":
-            recurring_monthly_income += amount * Decimal("52") / Decimal("12")
-        elif income.frequency == "biweekly":
-            recurring_monthly_income += amount * Decimal("26") / Decimal("12")
-        else:
-            recurring_monthly_income += amount
+        recurring_monthly_income += _income_source_monthly_amount(income, start, end)
 
     variable_income_total = ZERO
     for entry in variable_income_entries:
@@ -362,6 +400,9 @@ def calculate_dashboard(db: Session, month: str | None = None):
     remaining_per_category: list[schemas.CategorySummary] = []
     total_allowances = ZERO
     total_spent = ZERO
+    remaining_budget_to_reserve_total = ZERO
+    over_budget_total = ZERO
+    categories_over_budget_count = 0
 
     for category in categories:
         budget = _normalize_money(Decimal(category.monthly_budget))
@@ -370,6 +411,12 @@ def calculate_dashboard(db: Session, month: str | None = None):
 
         total_allowances += budget
         total_spent += spent
+
+        if remaining > ZERO:
+            remaining_budget_to_reserve_total += remaining
+        elif remaining < ZERO:
+            over_budget_total += abs(remaining)
+            categories_over_budget_count += 1
 
         remaining_per_category.append(
             schemas.CategorySummary(
@@ -387,11 +434,16 @@ def calculate_dashboard(db: Session, month: str | None = None):
     monthly_income = _normalize_money(monthly_income)
     total_allowances = _normalize_money(total_allowances)
     total_spent = _normalize_money(total_spent)
+    remaining_budget_to_reserve_total = _normalize_money(remaining_budget_to_reserve_total)
+    over_budget_total = _normalize_money(over_budget_total)
     regular_bills_total = _normalize_money(regular_bills_total)
     chapter13_payment_total = _normalize_money(chapter13_payment_total)
     safe_to_spend = _normalize_money(monthly_income - total_bills - total_allowances)
     buffer_after_bills = _normalize_money(monthly_income - total_bills)
     buffer_after_actual_spending = _normalize_money(monthly_income - total_bills - total_spent)
+    available_to_spend_right_now = _normalize_money(
+        monthly_income - total_bills - total_spent - remaining_budget_to_reserve_total
+    )
 
     return {
         "month": label,
@@ -403,8 +455,12 @@ def calculate_dashboard(db: Session, month: str | None = None):
         "regular_bills_total": regular_bills_total,
         "total_allowances": total_allowances,
         "total_spent_in_allowance_categories": total_spent,
+        "remaining_budget_to_reserve_total": remaining_budget_to_reserve_total,
+        "over_budget_total": over_budget_total,
+        "categories_over_budget_count": categories_over_budget_count,
         "safe_to_spend_after_budgeted_categories": safe_to_spend,
         "buffer_after_bills": buffer_after_bills,
         "buffer_after_actual_spending": buffer_after_actual_spending,
+        "available_to_spend_right_now": available_to_spend_right_now,
         "remaining_per_category": remaining_per_category,
     }

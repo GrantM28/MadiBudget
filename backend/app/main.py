@@ -58,6 +58,19 @@ def _ensure_schema_updates():
                     )
                 )
 
+    if "income_sources" in inspector.get_table_names():
+        income_columns = {
+            column["name"] for column in inspector.get_columns("income_sources")
+        }
+        if "payday_reference_date" not in income_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE income_sources "
+                        "ADD COLUMN payday_reference_date DATE"
+                    )
+                )
+
 
 @app.on_event("startup")
 def on_startup():

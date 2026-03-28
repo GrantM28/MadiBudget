@@ -14,6 +14,7 @@ class IncomeSourceBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     amount: Decimal = Field(..., gt=0)
     frequency: Frequency
+    payday_reference_date: date | None = None
     active: bool = True
 
 
@@ -133,7 +134,11 @@ class DashboardResponse(BaseModel):
     regular_bills_total: Decimal
     total_allowances: Decimal
     total_spent_in_allowance_categories: Decimal
+    remaining_budget_to_reserve_total: Decimal
+    over_budget_total: Decimal
+    categories_over_budget_count: int
     safe_to_spend_after_budgeted_categories: Decimal
+    available_to_spend_right_now: Decimal
     remaining_per_category: list[CategorySummary]
 
 
@@ -145,7 +150,11 @@ class PlanResponse(BaseModel):
     total_bills: Decimal
     total_allowances: Decimal
     total_spent_in_allowance_categories: Decimal
+    remaining_budget_to_reserve_total: Decimal
+    over_budget_total: Decimal
+    categories_over_budget_count: int
     buffer_after_bills: Decimal
     safe_to_spend_after_budgeted_categories: Decimal
     buffer_after_actual_spending: Decimal
+    available_to_spend_right_now: Decimal
     remaining_per_category: list[CategorySummary]

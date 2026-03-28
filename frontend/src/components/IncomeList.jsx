@@ -9,10 +9,62 @@ function formatMoney(value) {
   return currency.format(Number(value || 0));
 }
 
+function averageMonthlyIncome(amount, frequency) {
+  const numericAmount = Number(amount || 0);
+
+  if (frequency === "weekly") {
+    return (numericAmount * 52) / 12;
+  }
+
+  if (frequency === "biweekly") {
+    return (numericAmount * 26) / 12;
+  }
+
+  return numericAmount;
+}
+
+function paychecksInMonth(month, paydayReferenceDate, frequency) {
+  if (!paydayReferenceDate) {
+    return null;
+  }
+
+  if (frequency === "monthly") {
+    return 1;
+  }
+
+  const intervalDays = frequency === "weekly" ? 7 : frequency === "biweekly" ? 14 : null;
+  if (!intervalDays) {
+    return null;
+  }
+
+  const [year, monthNumber] = month.split("-").map(Number);
+  const start = new Date(year, monthNumber - 1, 1);
+  const end = new Date(year, monthNumber, 0);
+  const anchor = new Date(`${paydayReferenceDate}T12:00:00`);
+  const dayMs = 24 * 60 * 60 * 1000;
+  const firstIndex = Math.ceil((start.getTime() - anchor.getTime()) / dayMs / intervalDays);
+  const lastIndex = Math.floor((end.getTime() - anchor.getTime()) / dayMs / intervalDays);
+  return Math.max(0, lastIndex - firstIndex + 1);
+}
+
+function monthlyIncomeForMonth(income, month) {
+  const count = paychecksInMonth(month, income.payday_reference_date, income.frequency);
+  if (count == null) {
+    return averageMonthlyIncome(income.amount, income.frequency);
+  }
+
+  if (income.frequency === "weekly" || income.frequency === "biweekly") {
+    return Number(income.amount || 0) * count;
+  }
+
+  return Number(income.amount || 0);
+}
+
 const initialIncomeForm = {
   name: "",
   amount: "",
   frequency: "biweekly",
+  payday_reference_date: "",
   active: true,
 };
 
@@ -73,6 +125,7 @@ export default function IncomeList({
       name: income.name,
       amount: String(income.amount),
       frequency: income.frequency,
+      payday_reference_date: income.payday_reference_date || "",
       active: income.active,
     });
     setError("");
@@ -96,6 +149,7 @@ export default function IncomeList({
     const payload = {
       ...incomeForm,
       amount: Number(incomeForm.amount),
+      payday_reference_date: incomeForm.payday_reference_date || null,
     };
 
     try {
@@ -214,6 +268,11 @@ export default function IncomeList({
           <span className="section-count">{incomes.length}</span>
         </div>
 
+        <p className="helper-text">
+          Add one real payday for weekly or biweekly income so MadiBudget can count extra-check
+          months by calendar instead of flattening every month to the same average.
+        </p>
+
         <form className="sheet-entry-form" onSubmit={handleIncomeSubmit}>
           <div className="sheet-entry-grid sheet-entry-grid-income">
             <div className="field">
@@ -254,6 +313,21 @@ export default function IncomeList({
                 <option value="biweekly">Biweekly</option>
                 <option value="monthly">Monthly</option>
               </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="income-payday-reference">Reference Payday</label>
+              <input
+                id="income-payday-reference"
+                type="date"
+                value={incomeForm.payday_reference_date}
+                onChange={(event) =>
+                  setIncomeForm({
+                    ...incomeForm,
+                    payday_reference_date: event.target.value,
+                  })
+                }
+              />
             </div>
 
             <div className="field">
@@ -303,39 +377,60 @@ export default function IncomeList({
                   <th className="row-number-column">#</th>
                   <th>Source</th>
                   <th>Frequency</th>
+                  <th>Reference Payday</th>
+                  <th>Checks</th>
                   <th>Status</th>
+                  <th>This Month</th>
                   <th>Amount</th>
                   <th className="actions-column">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedIncomes.map((income, index) => (
-                  <tr key={income.id}>
-                    <td className="row-number-column">{index + 1}</td>
-                    <td className="budget-table-category">{income.name}</td>
-                    <td>{income.frequency}</td>
-                    <td>{income.active ? "Active" : "Inactive"}</td>
-                    <td>{formatMoney(income.amount)}</td>
-                    <td className="actions-column">
-                      <div className="action-group">
-                        <button
-                          className="table-action-button"
-                          type="button"
-                          onClick={() => startIncomeEdit(income)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="table-action-button table-action-button-danger"
-                          type="button"
-                          onClick={() => handleDeleteIncome(income)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {sortedIncomes.map((income, index) => {
+                  const paychecks = paychecksInMonth(
+                    month,
+                    income.payday_reference_date,
+                    income.frequency,
+                  );
+                  const monthlyEstimate = monthlyIncomeForMonth(income, month);
+
+                  return (
+                    <tr key={income.id}>
+                      <td className="row-number-column">{index + 1}</td>
+                      <td className="budget-table-category">{income.name}</td>
+                      <td>{income.frequency}</td>
+                      <td>{income.payday_reference_date || "Not set"}</td>
+                      <td>
+                        {paychecks == null
+                          ? income.frequency === "monthly"
+                            ? "1"
+                            : "Avg"
+                          : paychecks}
+                      </td>
+                      <td>{income.active ? "Active" : "Inactive"}</td>
+                      <td>{formatMoney(monthlyEstimate)}</td>
+                      <td>{formatMoney(income.amount)}</td>
+                      <td className="actions-column">
+                        <div className="action-group">
+                          <button
+                            className="table-action-button"
+                            type="button"
+                            onClick={() => startIncomeEdit(income)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="table-action-button table-action-button-danger"
+                            type="button"
+                            onClick={() => handleDeleteIncome(income)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

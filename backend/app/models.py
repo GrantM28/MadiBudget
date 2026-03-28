@@ -11,6 +11,7 @@ class IncomeSource(Base):
     name = Column(String(120), nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
     frequency = Column(String(20), nullable=False)
+    payday_reference_date = Column(Date, nullable=True)
     active = Column(Boolean, nullable=False, default=True, server_default="true")
 
 

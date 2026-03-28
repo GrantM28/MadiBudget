@@ -616,6 +616,50 @@ button {
   gap: 18px;
 }
 
+.dashboard-alert {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.7fr) minmax(0, 1fr);
+  gap: 18px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.dashboard-alert.safe-positive {
+  background: linear-gradient(135deg, rgba(92, 197, 142, 0.15), rgba(92, 197, 142, 0.05));
+  border-color: rgba(92, 197, 142, 0.28);
+}
+
+.dashboard-alert.safe-negative {
+  background: linear-gradient(135deg, rgba(216, 109, 109, 0.18), rgba(216, 109, 109, 0.06));
+  border-color: rgba(216, 109, 109, 0.28);
+}
+
+.dashboard-alert-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+.dashboard-alert-value {
+  font-size: clamp(2rem, 4vw, 3rem);
+  letter-spacing: -0.03em;
+}
+
+.dashboard-alert-copy {
+  color: var(--text-muted);
+  line-height: 1.65;
+}
+
+.dashboard-alert-copy p {
+  margin: 0 0 8px;
+}
+
 .dashboard-header {
   display: flex;
   align-items: flex-start;
@@ -645,9 +689,18 @@ button {
   gap: 14px;
 }
 
+.metrics-grid-dashboard {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
 .metric-card {
   padding: 16px;
   border-radius: 16px;
+}
+
+.metric-card-critical {
+  background: linear-gradient(135deg, rgba(216, 109, 109, 0.14), rgba(216, 109, 109, 0.04));
+  border-color: rgba(216, 109, 109, 0.22);
 }
 
 .metric-value {
@@ -761,6 +814,10 @@ button {
   background: rgba(60, 130, 214, 0.06);
 }
 
+.budget-table-row-danger td {
+  background: rgba(216, 109, 109, 0.055);
+}
+
 .budget-table td:last-child,
 .budget-table th:last-child,
 .transaction-table td:last-child,
@@ -823,6 +880,11 @@ button {
   border-color: rgba(217, 169, 90, 0.22);
 }
 
+.summary-tile-critical {
+  background: rgba(216, 109, 109, 0.13);
+  border-color: rgba(216, 109, 109, 0.24);
+}
+
 .entry-form {
   display: grid;
   gap: 14px;
@@ -849,9 +911,10 @@ button {
 
 .sheet-entry-grid-income {
   grid-template-columns:
-    minmax(220px, 1.7fr)
+    minmax(220px, 1.6fr)
     minmax(120px, 0.9fr)
     minmax(140px, 0.9fr)
+    minmax(170px, 1fr)
     minmax(140px, 0.9fr)
     auto;
 }
@@ -1074,6 +1137,10 @@ button {
   }
 
   .visualize-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-alert {
     grid-template-columns: 1fr;
   }
 }
