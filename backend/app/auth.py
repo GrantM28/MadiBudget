@@ -1,10 +1,14 @@
 import os
+import base64
+import binascii
+import hashlib
+import hmac
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -12,20 +16,76 @@ from . import models
 from .db import get_db
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer(auto_error=False)
 
 AUTH_SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "madibudget-dev-change-me")
 AUTH_ALGORITHM = "HS256"
 AUTH_TOKEN_EXPIRE_HOURS = int(os.getenv("AUTH_TOKEN_EXPIRE_HOURS", "12"))
+PASSWORD_HASH_ITERATIONS = int(os.getenv("PASSWORD_HASH_ITERATIONS", "390000"))
+PASSWORD_HASH_SCHEME = "pbkdf2_sha256"
+PASSWORD_SALT_BYTES = 16
+
+try:
+    from passlib.context import CryptContext
+except Exception:  # pragma: no cover - legacy fallback only
+    CryptContext = None
+
+
+legacy_pwd_context = (
+    CryptContext(schemes=["bcrypt"], deprecated="auto")
+    if CryptContext is not None
+    else None
+)
+
+
+def _encode_base64(value: bytes) -> str:
+    return base64.b64encode(value).decode("utf-8")
+
+
+def _decode_base64(value: str) -> bytes:
+    return base64.b64decode(value.encode("utf-8"))
+
+
+def _pbkdf2_hash(password: str, salt: bytes, iterations: int) -> bytes:
+    return hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        iterations,
+    )
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    salt = secrets.token_bytes(PASSWORD_SALT_BYTES)
+    digest = _pbkdf2_hash(password, salt, PASSWORD_HASH_ITERATIONS)
+    return (
+        f"{PASSWORD_HASH_SCHEME}"
+        f"${PASSWORD_HASH_ITERATIONS}"
+        f"${_encode_base64(salt)}"
+        f"${_encode_base64(digest)}"
+    )
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    if hashed_password.startswith(f"{PASSWORD_HASH_SCHEME}$"):
+        try:
+            _, iteration_text, salt_text, digest_text = hashed_password.split("$", 3)
+            iterations = int(iteration_text)
+            salt = _decode_base64(salt_text)
+            expected_digest = _decode_base64(digest_text)
+        except (ValueError, binascii.Error):
+            return False
+
+        calculated_digest = _pbkdf2_hash(plain_password, salt, iterations)
+        return hmac.compare_digest(calculated_digest, expected_digest)
+
+    if legacy_pwd_context is not None:
+        try:
+            return legacy_pwd_context.verify(plain_password, hashed_password)
+        except Exception:
+            return False
+
+    return False
 
 
 def create_access_token(username: str) -> str:

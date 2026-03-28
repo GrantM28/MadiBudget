@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import auth, models, schemas
@@ -26,14 +27,34 @@ def setup_first_user(payload: schemas.UserSetupCreate, db: Session = Depends(get
             detail="Initial setup has already been completed.",
         )
 
-    user = models.User(
-        username=payload.username.strip(),
-        password_hash=auth.hash_password(payload.password),
-        is_active=True,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    username = payload.username.strip()
+    if len(username) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username must contain at least 3 non-space characters.",
+        )
+
+    try:
+        user = models.User(
+            username=username,
+            password_hash=auth.hash_password(payload.password),
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That username is already in use.",
+        ) from error
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unable to create the first login: {error.__class__.__name__}",
+        ) from error
 
     return {
         "access_token": auth.create_access_token(user.username),
