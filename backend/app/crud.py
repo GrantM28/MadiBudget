@@ -106,6 +106,22 @@ def _serialize_bill(
     )
 
 
+def _get_or_create_cash_position(db: Session) -> models.CashPosition:
+    record = db.scalar(select(models.CashPosition).order_by(models.CashPosition.id.asc()))
+    if record:
+        return record
+
+    record = models.CashPosition(
+        name="Checking",
+        current_balance=ZERO,
+        balance_as_of=date.today(),
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
 def list_incomes(db: Session):
     return db.scalars(select(models.IncomeSource).order_by(models.IncomeSource.name.asc())).all()
 
@@ -138,6 +154,19 @@ def delete_income(db: Session, income_id: int):
 
     db.delete(record)
     db.commit()
+
+
+def get_cash_position(db: Session):
+    return _get_or_create_cash_position(db)
+
+
+def update_cash_position(db: Session, payload: schemas.CashPositionUpdate):
+    record = _get_or_create_cash_position(db)
+    record.current_balance = payload.current_balance
+    record.balance_as_of = payload.balance_as_of
+    db.commit()
+    db.refresh(record)
+    return record
 
 
 def list_variable_income_entries(db: Session, month: str | None = None):
@@ -502,6 +531,7 @@ def delete_transaction(db: Session, transaction_id: int):
 
 def calculate_dashboard(db: Session, month: str | None = None):
     start, end, label = _month_bounds(month)
+    cash_position = _get_or_create_cash_position(db)
 
     incomes = db.scalars(
         select(models.IncomeSource).where(models.IncomeSource.active.is_(True))
@@ -603,12 +633,18 @@ def calculate_dashboard(db: Session, month: str | None = None):
     safe_to_spend = _normalize_money(monthly_income - total_bills - total_allowances)
     buffer_after_bills = _normalize_money(monthly_income - total_bills)
     buffer_after_actual_spending = _normalize_money(monthly_income - total_bills - total_spent)
-    available_to_spend_right_now = _normalize_money(
+    projected_available_to_spend_right_now = _normalize_money(
         monthly_income - total_bills - total_spent - remaining_budget_to_reserve_total
+    )
+    current_checking_balance = _normalize_money(Decimal(cash_position.current_balance))
+    available_to_spend_right_now = _normalize_money(
+        min(projected_available_to_spend_right_now, current_checking_balance)
     )
 
     return {
         "month": label,
+        "current_checking_balance": current_checking_balance,
+        "balance_as_of": cash_position.balance_as_of,
         "recurring_monthly_income": recurring_monthly_income,
         "variable_income_total": variable_income_total,
         "monthly_income": monthly_income,
@@ -621,6 +657,7 @@ def calculate_dashboard(db: Session, month: str | None = None):
         "over_budget_total": over_budget_total,
         "categories_over_budget_count": categories_over_budget_count,
         "safe_to_spend_after_budgeted_categories": safe_to_spend,
+        "projected_available_to_spend_right_now": projected_available_to_spend_right_now,
         "buffer_after_bills": buffer_after_bills,
         "buffer_after_actual_spending": buffer_after_actual_spending,
         "available_to_spend_right_now": available_to_spend_right_now,

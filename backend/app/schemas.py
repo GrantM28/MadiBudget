@@ -53,6 +53,20 @@ class VariableIncomeRead(VariableIncomeBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CashPositionUpdate(BaseModel):
+    current_balance: Decimal
+    balance_as_of: date
+
+
+class CashPositionRead(BaseModel):
+    id: int
+    name: str
+    current_balance: Decimal
+    balance_as_of: date | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class BillBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     amount: Decimal = Field(..., gt=0)
@@ -140,6 +154,8 @@ class CategorySummary(BaseModel):
 
 class DashboardResponse(BaseModel):
     month: str
+    current_checking_balance: Decimal
+    balance_as_of: date | None = None
     recurring_monthly_income: Decimal
     variable_income_total: Decimal
     monthly_income: Decimal
@@ -152,12 +168,15 @@ class DashboardResponse(BaseModel):
     over_budget_total: Decimal
     categories_over_budget_count: int
     safe_to_spend_after_budgeted_categories: Decimal
+    projected_available_to_spend_right_now: Decimal
     available_to_spend_right_now: Decimal
     remaining_per_category: list[CategorySummary]
 
 
 class PlanResponse(BaseModel):
     month: str
+    current_checking_balance: Decimal
+    balance_as_of: date | None = None
     recurring_monthly_income: Decimal
     variable_income_total: Decimal
     monthly_income: Decimal
@@ -170,5 +189,6 @@ class PlanResponse(BaseModel):
     buffer_after_bills: Decimal
     safe_to_spend_after_budgeted_categories: Decimal
     buffer_after_actual_spending: Decimal
+    projected_available_to_spend_right_now: Decimal
     available_to_spend_right_now: Decimal
     remaining_per_category: list[CategorySummary]

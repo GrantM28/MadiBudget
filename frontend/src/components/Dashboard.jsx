@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -11,12 +13,42 @@ function formatPercent(value) {
   return `${Number.isFinite(value) ? value.toFixed(0) : "0"}%`;
 }
 
-export default function Dashboard({ dashboard, plan, month }) {
+function todayValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export default function Dashboard({
+  dashboard,
+  plan,
+  cashPosition,
+  month,
+  onUpdateCashPosition,
+}) {
+  const [cashForm, setCashForm] = useState({
+    current_balance: "",
+    balance_as_of: todayValue(),
+  });
+  const [savingCash, setSavingCash] = useState(false);
+  const [cashError, setCashError] = useState("");
+
+  useEffect(() => {
+    if (!cashPosition) {
+      return;
+    }
+
+    setCashForm({
+      current_balance: String(cashPosition.current_balance ?? ""),
+      balance_as_of: cashPosition.balance_as_of || todayValue(),
+    });
+  }, [cashPosition]);
+
   if (!dashboard || !plan) {
     return null;
   }
 
   const availableNow = Number(dashboard.available_to_spend_right_now);
+  const projectedAvailableNow = Number(dashboard.projected_available_to_spend_right_now);
+  const checkingBalance = Number(dashboard.current_checking_balance);
   const plannedCushion = Number(dashboard.safe_to_spend_after_budgeted_categories);
   const overBudgetTotal = Number(dashboard.over_budget_total);
   const categoriesOverBudget = dashboard.categories_over_budget_count;
@@ -24,22 +56,28 @@ export default function Dashboard({ dashboard, plan, month }) {
   const totalSpent = Number(dashboard.total_spent_in_allowance_categories);
   const budgetUsagePercent =
     totalAllowances > 0 ? Math.max(0, (totalSpent / totalAllowances) * 100) : 0;
+  const checkingIsLimiter = checkingBalance < projectedAvailableNow;
 
-      let statusLabel = "On track";
-      let statusClass = "safe-positive";
-      let statusMessage = "Current spending is still inside the monthly category plan.";
+  let statusLabel = "On track";
+  let statusClass = "safe-positive";
+  let statusMessage = "Current spending is still inside the monthly category plan.";
 
   if (availableNow < 0) {
     statusLabel = "Over budget now";
     statusClass = "safe-negative";
     statusMessage =
       "You have already spent beyond the money left after fixed expenses and remaining category allowances.";
+  } else if (checkingIsLimiter) {
+    statusLabel = "Checking is tight";
+    statusClass = "safe-negative";
+    statusMessage =
+      "The monthly plan may leave room later, but your checking balance is the tighter limit right now.";
   } else if (overBudgetTotal > 0) {
     statusLabel = "Categories over budget";
     statusClass = "safe-negative";
     statusMessage =
       "Some categories are already over budget, even if the overall month still has cash left.";
-      } else if (plannedCushion < 0) {
+  } else if (plannedCushion < 0) {
     statusLabel = "Plan is short";
     statusClass = "safe-negative";
     statusMessage =
@@ -77,7 +115,28 @@ export default function Dashboard({ dashboard, plan, month }) {
   const topSpendCategory =
     [...categoryRows].sort((a, b) => Number(b.spent) - Number(a.spent))[0] || null;
   const budgetUsageClass =
-    budgetUsagePercent > 100 ? "progress-fill-danger" : budgetUsagePercent >= 85 ? "progress-fill-warning" : "progress-fill-safe";
+    budgetUsagePercent > 100
+      ? "progress-fill-danger"
+      : budgetUsagePercent >= 85
+        ? "progress-fill-warning"
+        : "progress-fill-safe";
+
+  async function handleCashSubmit(event) {
+    event.preventDefault();
+    setSavingCash(true);
+    setCashError("");
+
+    try {
+      await onUpdateCashPosition({
+        current_balance: Number(cashForm.current_balance),
+        balance_as_of: cashForm.balance_as_of,
+      });
+    } catch (submitError) {
+      setCashError(submitError.message || "Unable to update checking balance.");
+    } finally {
+      setSavingCash(false);
+    }
+  }
 
   return (
     <section className="dashboard">
@@ -86,8 +145,8 @@ export default function Dashboard({ dashboard, plan, month }) {
           <p className="section-kicker">Overview</p>
           <h2 className="dashboard-title">Budget snapshot for {month}</h2>
           <p className="section-subtitle">
-            The dashboard now separates planning cushion from what is actually safe to spend after
-            current category overspending.
+            The dashboard now combines your month plan with the real checking balance you actually
+            have on hand.
           </p>
         </div>
 
@@ -107,10 +166,91 @@ export default function Dashboard({ dashboard, plan, month }) {
         <div className="dashboard-alert-copy">
           <p>{statusMessage}</p>
           <p>
-            Overspent categories: <strong>{categoriesOverBudget}</strong> | Over budget by{" "}
-            <strong>{formatMoney(dashboard.over_budget_total)}</strong>
+            Projected by plan: <strong>{formatMoney(dashboard.projected_available_to_spend_right_now)}</strong>
+            {" | "}
+            Checking balance: <strong>{formatMoney(dashboard.current_checking_balance)}</strong>
           </p>
         </div>
+      </section>
+
+      <section className="dashboard-cash-grid">
+        <article className="section-card dashboard-priority-card">
+          <div className="section-title-row">
+            <div>
+              <h2>Checking Snapshot</h2>
+              <p className="section-subtitle">
+                Keep this updated so the safe-to-spend number reflects your real bank balance.
+              </p>
+            </div>
+          </div>
+
+          <div className="summary-stack">
+            <div className="summary-tile">
+              <span className="summary-list-label">Current Checking</span>
+              <strong>{formatMoney(dashboard.current_checking_balance)}</strong>
+            </div>
+            <div className="summary-tile">
+              <span className="summary-list-label">Balance As Of</span>
+              <strong>{dashboard.balance_as_of || "Not set"}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article className="section-card dashboard-priority-card">
+          <div className="section-title-row">
+            <div>
+              <h2>Update Checking Balance</h2>
+              <p className="section-subtitle">
+                Enter the current checking amount from your bank to keep the dashboard honest.
+              </p>
+            </div>
+          </div>
+
+          <form className="sheet-entry-form dashboard-cash-form" onSubmit={handleCashSubmit}>
+            <div className="register-toolbar-grid register-toolbar-grid-cash">
+              <div className="field">
+                <label htmlFor="cash-balance">Checking Balance</label>
+                <input
+                  id="cash-balance"
+                  type="number"
+                  step="0.01"
+                  value={cashForm.current_balance}
+                  onChange={(event) =>
+                    setCashForm((current) => ({
+                      ...current,
+                      current_balance: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="cash-balance-date">As Of</label>
+                <input
+                  id="cash-balance-date"
+                  type="date"
+                  value={cashForm.balance_as_of}
+                  onChange={(event) =>
+                    setCashForm((current) => ({
+                      ...current,
+                      balance_as_of: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </div>
+
+              <div className="sheet-entry-actions">
+                <button className="button" type="submit" disabled={savingCash}>
+                  {savingCash ? "Saving..." : "Update Balance"}
+                </button>
+              </div>
+            </div>
+          </form>
+
+          {cashError ? <div className="form-error">{cashError}</div> : null}
+        </article>
       </section>
 
       <section className="dashboard-priority-grid">
@@ -210,6 +350,12 @@ export default function Dashboard({ dashboard, plan, month }) {
         </article>
 
         <article className="metric-card">
+          <div className="metric-label">Current Checking</div>
+          <div className="metric-value">{formatMoney(dashboard.current_checking_balance)}</div>
+          <div className="metric-note">Real cash currently sitting in checking.</div>
+        </article>
+
+        <article className="metric-card">
           <div className="metric-label">Total Fixed Expenses</div>
           <div className="metric-value">{formatMoney(dashboard.total_bills)}</div>
           <div className="metric-note">Required fixed monthly obligations for the month.</div>
@@ -238,24 +384,16 @@ export default function Dashboard({ dashboard, plan, month }) {
         </article>
 
         <article className="metric-card">
-          <div className="metric-label">Over Budget By</div>
-          <div className={`metric-value ${overBudgetTotal > 0 ? "safe-negative" : ""}`}>
-            {formatMoney(dashboard.over_budget_total)}
-          </div>
-          <div className="metric-note">How far current overspending has already blown past category budgets.</div>
-        </article>
-
-        <article className="metric-card">
-          <div className="metric-label">Planned Cushion</div>
+          <div className="metric-label">Projected Safe</div>
           <div
             className={`metric-value ${
-              plannedCushion >= 0 ? "safe-positive" : "safe-negative"
+              projectedAvailableNow >= 0 ? "safe-positive" : "safe-negative"
             }`}
           >
-            {formatMoney(dashboard.safe_to_spend_after_budgeted_categories)}
+            {formatMoney(dashboard.projected_available_to_spend_right_now)}
           </div>
           <div className="metric-note">
-            This is the plan-only cushion if every category stayed on budget.
+            What the month math says before checking balance caps it.
           </div>
         </article>
 
@@ -355,8 +493,8 @@ export default function Dashboard({ dashboard, plan, month }) {
             </div>
 
             <div className="summary-tile">
-              <span className="summary-list-label">Planned Cushion</span>
-              <strong>{formatMoney(plan.safe_to_spend_after_budgeted_categories)}</strong>
+              <span className="summary-list-label">Projected Safe</span>
+              <strong>{formatMoney(plan.projected_available_to_spend_right_now)}</strong>
             </div>
 
             <div className="summary-tile summary-tile-critical">

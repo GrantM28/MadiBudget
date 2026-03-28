@@ -622,6 +622,12 @@ button {
   gap: 18px;
 }
 
+.dashboard-cash-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.15fr);
+  gap: 18px;
+}
+
 .dashboard-priority-card {
   display: grid;
   gap: 14px;
@@ -941,6 +947,10 @@ button {
 
 .register-toolbar-grid-bills {
   grid-template-columns: minmax(240px, 1fr) auto;
+}
+
+.register-toolbar-grid-cash {
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
 }
 
 .sheet-entry-grid {
@@ -1264,6 +1274,7 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .dashboard-cash-grid,
   .dashboard-priority-grid {
     grid-template-columns: 1fr;
   }
@@ -1333,6 +1344,7 @@ button {
   .form-grid,
   .register-toolbar-grid,
   .register-toolbar-grid-bills,
+  .register-toolbar-grid-cash,
   .sheet-entry-grid-income,
   .sheet-entry-grid-categories,
   .sheet-entry-grid-bills,

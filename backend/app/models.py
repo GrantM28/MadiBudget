@@ -24,6 +24,15 @@ class VariableIncomeEntry(Base):
     date = Column(Date, nullable=False)
 
 
+class CashPosition(Base):
+    __tablename__ = "cash_positions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False, default="Checking", server_default="Checking")
+    current_balance = Column(Numeric(10, 2), nullable=False, default=0, server_default="0")
+    balance_as_of = Column(Date, nullable=True)
+
+
 class Bill(Base):
     __tablename__ = "bills"
 

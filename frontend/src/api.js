@@ -37,6 +37,12 @@ async function request(path, options = {}) {
 export const api = {
   getDashboard: (month) => request(`/dashboard?month=${encodeURIComponent(month)}`),
   getPlan: (month) => request(`/plan?month=${encodeURIComponent(month)}`),
+  getCashPosition: () => request("/cash-position"),
+  updateCashPosition: (payload) =>
+    request("/cash-position", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
   getIncomes: () => request("/incomes"),
   createIncome: (payload) =>
     request("/incomes", {

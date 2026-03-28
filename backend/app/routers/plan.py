@@ -14,6 +14,8 @@ def get_plan(month: str | None = None, db: Session = Depends(get_db)):
         dashboard = crud.calculate_dashboard(db, month)
         return {
             "month": dashboard["month"],
+            "current_checking_balance": dashboard["current_checking_balance"],
+            "balance_as_of": dashboard["balance_as_of"],
             "recurring_monthly_income": dashboard["recurring_monthly_income"],
             "variable_income_total": dashboard["variable_income_total"],
             "monthly_income": dashboard["monthly_income"],
@@ -26,6 +28,7 @@ def get_plan(month: str | None = None, db: Session = Depends(get_db)):
             "buffer_after_bills": dashboard["buffer_after_bills"],
             "safe_to_spend_after_budgeted_categories": dashboard["safe_to_spend_after_budgeted_categories"],
             "buffer_after_actual_spending": dashboard["buffer_after_actual_spending"],
+            "projected_available_to_spend_right_now": dashboard["projected_available_to_spend_right_now"],
             "available_to_spend_right_now": dashboard["available_to_spend_right_now"],
             "remaining_per_category": dashboard["remaining_per_category"],
         }

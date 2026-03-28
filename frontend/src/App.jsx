@@ -29,6 +29,7 @@ export default function App() {
   const [activeView, setActiveView] = useState("dashboard");
   const [dashboard, setDashboard] = useState(null);
   const [plan, setPlan] = useState(null);
+  const [cashPosition, setCashPosition] = useState(null);
   const [incomes, setIncomes] = useState([]);
   const [incomeAdjustments, setIncomeAdjustments] = useState([]);
   const [bills, setBills] = useState([]);
@@ -45,6 +46,7 @@ export default function App() {
       const [
         dashboardData,
         planData,
+        cashPositionData,
         incomesData,
         incomeAdjustmentsData,
         billsData,
@@ -53,6 +55,7 @@ export default function App() {
       ] = await Promise.all([
         api.getDashboard(month),
         api.getPlan(month),
+        api.getCashPosition(),
         api.getIncomes(),
         api.getIncomeAdjustments(month),
         api.getBills(month),
@@ -62,6 +65,7 @@ export default function App() {
 
       setDashboard(dashboardData);
       setPlan(planData);
+      setCashPosition(cashPositionData);
       setIncomes(incomesData);
       setIncomeAdjustments(incomeAdjustmentsData);
       setBills(billsData);
@@ -163,6 +167,11 @@ export default function App() {
     await loadData();
   }
 
+  async function handleUpdateCashPosition(payload) {
+    await api.updateCashPosition(payload);
+    await loadData();
+  }
+
   const activeNav = navItems.find((item) => item.id === activeView);
 
   return (
@@ -223,7 +232,13 @@ export default function App() {
 
         <section className="view-shell">
           {activeView === "dashboard" ? (
-            <Dashboard dashboard={dashboard} plan={plan} month={month} />
+            <Dashboard
+              dashboard={dashboard}
+              plan={plan}
+              cashPosition={cashPosition}
+              month={month}
+              onUpdateCashPosition={handleUpdateCashPosition}
+            />
           ) : null}
 
           {activeView === "transactions" ? (
