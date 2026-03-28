@@ -48,9 +48,10 @@ export default function BillList({ bills, onCreate }) {
           <h2>Bills</h2>
           <p className="section-subtitle">Track regular bills and your dedicated Chapter 13 payment.</p>
         </div>
+        <span className="section-count">{bills.length}</span>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form className="entry-form" onSubmit={handleSubmit}>
         <div className="form-grid">
           <div className="field">
             <label htmlFor="bill-name">Name</label>
@@ -118,13 +119,13 @@ export default function BillList({ bills, onCreate }) {
       {bills.length === 0 ? (
         <p className="empty-state">No bills added yet.</p>
       ) : (
-        <ul className="item-list">
+        <ul className="item-list compact-list">
           {bills.map((bill) => (
             <li className="list-item" key={bill.id}>
-              <div>
+              <div className="list-item-main">
                 <div className="list-item-title">{bill.name}</div>
                 <div className="list-item-subtitle">
-                  Due day {bill.due_day} • {bill.type === "chapter13" ? "Chapter 13" : "Regular bill"}
+                  Due day {bill.due_day} - {bill.type === "chapter13" ? "Chapter 13" : "Regular bill"}
                 </div>
               </div>
               <div className="list-item-amount">{formatMoney(bill.amount)}</div>

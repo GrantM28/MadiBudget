@@ -210,10 +210,12 @@ Optional month filters:
 - The backend creates database tables automatically on startup.
 - You should seed categories before adding transactions, because transactions require a valid existing category.
 - The frontend uses either `VITE_API_URL` or the current browser hostname with port `8000`.
+- LAN IP access like `http://192.168.x.x:3040` is allowed by default for self-hosted local-network use.
 
 ## Likely Issues To Watch For
 
 - If PostgreSQL is not running or `DATABASE_URL` is wrong, the backend will not start.
 - If you open the frontend from another machine, make sure port `8000` is reachable from that device too.
 - If CORS blocks requests during local development, update `CORS_ORIGINS`.
+- If you use a custom hostname instead of `localhost` or a private-network IP, add it to `CORS_ORIGINS` or set `CORS_ALLOW_ORIGIN_REGEX`.
 - The frontend does not include auth yet, so keep the app on a trusted network.

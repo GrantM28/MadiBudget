@@ -44,9 +44,10 @@ export default function CategoryList({ categories, onCreate }) {
           <h2>Allowance Categories</h2>
           <p className="section-subtitle">Every transaction must use one of these categories.</p>
         </div>
+        <span className="section-count">{categories.length}</span>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form className="entry-form" onSubmit={handleSubmit}>
         <div className="form-grid">
           <div className="field">
             <label htmlFor="category-name">Category Name</label>
@@ -86,10 +87,10 @@ export default function CategoryList({ categories, onCreate }) {
       {categories.length === 0 ? (
         <p className="empty-state">No allowance categories added yet.</p>
       ) : (
-        <ul className="item-list">
+        <ul className="item-list compact-list">
           {categories.map((category) => (
             <li className="list-item" key={category.id}>
-              <div>
+              <div className="list-item-main">
                 <div className="list-item-title">{category.name}</div>
                 <div className="list-item-subtitle">Monthly allowance budget</div>
               </div>

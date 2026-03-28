@@ -46,9 +46,10 @@ export default function IncomeList({ incomes, onCreate }) {
           <h2>Income Sources</h2>
           <p className="section-subtitle">Regular pay sources converted into monthly cash flow.</p>
         </div>
+        <span className="section-count">{incomes.length}</span>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form className="entry-form" onSubmit={handleSubmit}>
         <div className="form-grid">
           <div className="field">
             <label htmlFor="income-name">Name</label>
@@ -101,13 +102,13 @@ export default function IncomeList({ incomes, onCreate }) {
       {incomes.length === 0 ? (
         <p className="empty-state">No income sources added yet.</p>
       ) : (
-        <ul className="item-list">
+        <ul className="item-list compact-list">
           {incomes.map((income) => (
             <li className="list-item" key={income.id}>
-              <div>
+              <div className="list-item-main">
                 <div className="list-item-title">{income.name}</div>
                 <div className="list-item-subtitle">
-                  {income.frequency} {income.active ? "• active" : "• inactive"}
+                  {income.frequency} - {income.active ? "active" : "inactive"}
                 </div>
               </div>
               <div className="list-item-amount">{formatMoney(income.amount)}</div>

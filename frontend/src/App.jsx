@@ -85,29 +85,40 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <div className="background-glow background-glow-left" />
-      <div className="background-glow background-glow-right" />
-
-      <header className="hero">
-        <div>
-          <p className="eyebrow">MadiBudget</p>
-          <h1>Cash-flow clarity for a Chapter 13 household.</h1>
-          <p className="hero-copy">
-            Track income, bills, category spending, and the amount you can safely
-            spend without undercutting required obligations.
-          </p>
+      <header className="app-header">
+        <div className="brand-block">
+          <div className="brand-mark">MB</div>
+          <div>
+            <p className="app-kicker">MadiBudget</p>
+            <h1 className="app-title">Household budget workspace</h1>
+            <p className="app-subtitle">
+              Built to protect required bills, Chapter 13 obligations, and monthly
+              category limits before any extra spending happens.
+            </p>
+          </div>
         </div>
-        <div className="hero-panel">
-          <div className="hero-panel-label">Planning Month</div>
-          <input
-            className="month-input"
-            type="month"
-            value={month}
-            onChange={(event) => setMonth(event.target.value)}
-          />
-          <p className="hero-panel-copy">
-            Transactions and dashboard numbers stay aligned to the selected month.
-          </p>
+
+        <div className="header-controls">
+          <div className="header-control-card">
+            <label className="control-label" htmlFor="planning-month">
+              Planning month
+            </label>
+            <input
+              id="planning-month"
+              className="month-input"
+              type="month"
+              value={month}
+              onChange={(event) => setMonth(event.target.value)}
+            />
+          </div>
+
+          <div className="header-status-card">
+            <span className="status-label">Source of truth</span>
+            <strong>Backend-driven budget</strong>
+            <span className="status-note">
+              Transactions, category balances, and safe-to-spend stay synced to {month}.
+            </span>
+          </div>
         </div>
       </header>
 
@@ -116,14 +127,14 @@ export default function App() {
 
       <Dashboard dashboard={dashboard} plan={plan} month={month} />
 
-      <main className="content-grid">
-        <section className="stack-column">
+      <main className="workspace-grid">
+        <section className="stack-column stack-column-secondary">
           <IncomeList incomes={incomes} onCreate={handleCreateIncome} />
           <BillList bills={bills} onCreate={handleCreateBill} />
           <CategoryList categories={categories} onCreate={handleCreateCategory} />
         </section>
 
-        <section className="stack-column">
+        <section className="stack-column stack-column-primary">
           <TransactionForm
             categories={categories}
             onCreate={handleCreateTransaction}

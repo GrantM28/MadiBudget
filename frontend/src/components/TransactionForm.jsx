@@ -51,14 +51,15 @@ export default function TransactionForm({ categories, onCreate }) {
     <section className="section-card">
       <div className="section-title-row">
         <div>
-          <h2>Add Transaction</h2>
+          <h2>Record Spending</h2>
           <p className="section-subtitle">
-            Transactions are always assigned to an existing allowance category.
+            Every transaction must map to an existing allowance category.
           </p>
         </div>
+        <span className="section-count">Entry</span>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form className="entry-form" onSubmit={handleSubmit}>
         <div className="field">
           <label htmlFor="transaction-description">Description</label>
           <input
@@ -117,7 +118,7 @@ export default function TransactionForm({ categories, onCreate }) {
 
         {orderedCategories.length === 0 ? (
           <p className="helper-text">
-            Add or seed allowance categories first. Freeform transaction categories are disabled by design.
+            Add or seed categories first. Freeform transaction categories are intentionally disabled.
           </p>
         ) : null}
 
@@ -129,7 +130,7 @@ export default function TransactionForm({ categories, onCreate }) {
             type="submit"
             disabled={submitting || orderedCategories.length === 0}
           >
-            {submitting ? "Saving..." : "Add Transaction"}
+            {submitting ? "Saving..." : "Save Transaction"}
           </button>
         </div>
       </form>

@@ -13,6 +13,19 @@ def _cors_origins() -> list[str]:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
+def _cors_origin_regex() -> str:
+    return os.getenv(
+        "CORS_ALLOW_ORIGIN_REGEX",
+        r"^https?://("
+        r"localhost|"
+        r"127\.0\.0\.1|"
+        r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+        r"192\.168\.\d{1,3}\.\d{1,3}|"
+        r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}"
+        r")(:\d+)?$",
+    )
+
+
 app = FastAPI(
     title="MadiBudget API",
     version="1.0.0",
@@ -22,6 +35,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
+    allow_origin_regex=_cors_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
