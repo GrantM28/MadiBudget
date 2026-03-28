@@ -1119,6 +1119,15 @@ button {
   grid-template-columns: minmax(240px, 2fr) minmax(160px, 1fr) auto;
 }
 
+.sheet-entry-grid-categories-advanced {
+  grid-template-columns:
+    minmax(220px, 1.5fr)
+    minmax(150px, 1fr)
+    minmax(180px, 1fr)
+    minmax(160px, 1fr)
+    auto;
+}
+
 .sheet-entry-grid-variable-income {
   grid-template-columns: minmax(240px, 2fr) minmax(150px, 1fr) minmax(160px, 1fr) auto;
 }
@@ -1133,10 +1142,29 @@ button {
     auto;
 }
 
+.register-toolbar-grid-transactions {
+  grid-template-columns:
+    minmax(220px, 1.4fr)
+    minmax(160px, 0.8fr)
+    minmax(180px, 1fr)
+    minmax(180px, 1fr)
+    minmax(140px, 0.7fr)
+    minmax(140px, 0.7fr)
+    auto;
+}
+
+.register-toolbar-grid-categories {
+  grid-template-columns: minmax(240px, 1.4fr) minmax(180px, 0.8fr) auto;
+}
+
 .sheet-entry-actions {
   display: flex;
   justify-content: flex-end;
   align-items: end;
+}
+
+.field-span-full {
+  grid-column: 1 / -1;
 }
 
 .action-group {
@@ -1348,6 +1376,10 @@ button {
   min-width: 110px;
 }
 
+.hidden-file-input {
+  display: none;
+}
+
 .transaction-amount-positive {
   color: var(--success);
   font-weight: 700;
@@ -1498,9 +1530,12 @@ button {
   .form-grid,
   .register-toolbar-grid,
   .register-toolbar-grid-bills,
+  .register-toolbar-grid-transactions,
+  .register-toolbar-grid-categories,
   .register-toolbar-grid-cash,
   .sheet-entry-grid-income,
   .sheet-entry-grid-categories,
+  .sheet-entry-grid-categories-advanced,
   .sheet-entry-grid-bills,
   .sheet-entry-grid-variable-income,
   .sheet-entry-grid-transactions {

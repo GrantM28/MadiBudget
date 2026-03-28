@@ -186,7 +186,22 @@ function LineChart({ data }) {
   );
 }
 
-export default function Visualize({ transactions, month, categories }) {
+const initialRuleForm = {
+  pattern: "",
+  group_name: "",
+  match_type: "contains",
+  active: true,
+};
+
+export default function Visualize({
+  transactions,
+  month,
+  categories,
+  merchantRules,
+  onCreateRule,
+  onUpdateRule,
+  onDeleteRule,
+}) {
   const [chartType, setChartType] = useState("doughnut");
   const [groupBy, setGroupBy] = useState("description");
   const [metric, setMetric] = useState("expense");
@@ -195,6 +210,9 @@ export default function Visualize({ transactions, month, categories }) {
   const [search, setSearch] = useState("");
   const [topN, setTopN] = useState("8");
   const [namesDropdownOpen, setNamesDropdownOpen] = useState(false);
+  const [ruleForm, setRuleForm] = useState(initialRuleForm);
+  const [editingRuleId, setEditingRuleId] = useState(null);
+  const [ruleError, setRuleError] = useState("");
 
   const descriptionOptions = useMemo(() => {
     const uniqueDescriptions = [...new Set(transactions.map((transaction) => transaction.description.trim()))];
@@ -258,6 +276,10 @@ export default function Visualize({ transactions, month, categories }) {
           transaction.category_name ||
           transaction.fixed_expense_name ||
           (transaction.source_type === "fixed_expense" ? "Fixed Expense" : "Unassigned");
+        sortKey = label;
+        shortLabel = label.slice(0, 10);
+      } else if (groupBy === "merchant_group") {
+        label = transaction.merchant_group || "Unmatched";
         sortKey = label;
         shortLabel = label.slice(0, 10);
       } else if (groupBy === "day") {
@@ -335,6 +357,55 @@ export default function Visualize({ transactions, month, categories }) {
     setSelectedDescriptions([]);
   }
 
+  function startRuleEdit(rule) {
+    setEditingRuleId(rule.id);
+    setRuleForm({
+      pattern: rule.pattern,
+      group_name: rule.group_name,
+      match_type: rule.match_type,
+      active: rule.active,
+    });
+    setRuleError("");
+  }
+
+  function resetRuleForm() {
+    setEditingRuleId(null);
+    setRuleForm(initialRuleForm);
+    setRuleError("");
+  }
+
+  async function handleRuleSubmit(event) {
+    event.preventDefault();
+    setRuleError("");
+    try {
+      if (editingRuleId) {
+        await onUpdateRule(editingRuleId, ruleForm);
+      } else {
+        await onCreateRule(ruleForm);
+      }
+      resetRuleForm();
+    } catch (submitError) {
+      setRuleError(submitError.message || "Unable to save merchant rule.");
+    }
+  }
+
+  async function handleDeleteRule(rule) {
+    const confirmed = window.confirm(`Delete merchant rule "${rule.pattern}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setRuleError("");
+    try {
+      await onDeleteRule(rule.id);
+      if (editingRuleId === rule.id) {
+        resetRuleForm();
+      }
+    } catch (deleteError) {
+      setRuleError(deleteError.message || "Unable to delete merchant rule.");
+    }
+  }
+
   return (
     <section className="visualize-layout">
       <aside className="visualize-builder">
@@ -374,6 +445,7 @@ export default function Visualize({ transactions, month, categories }) {
             <div className="segmented-control">
               {[
                 ["description", "Transaction Name"],
+                ["merchant_group", "Merchant Group"],
                 ["category", "Category"],
                 ["day", "Day"],
               ].map(([value, label]) => (
@@ -550,6 +622,94 @@ export default function Visualize({ transactions, month, categories }) {
             ))}
           </div>
         </div>
+
+        <div className="visualize-panel">
+          <div className="visualize-filter-head">
+            <div>
+              <h3>Merchant Rules</h3>
+              <p>Map names like Sonic or McDonalds into custom groups like Fast Food.</p>
+            </div>
+            <span className="section-count">{merchantRules.length}</span>
+          </div>
+
+          <form className="entry-form" onSubmit={handleRuleSubmit}>
+            <div className="field">
+              <label htmlFor="merchant-rule-pattern">Pattern</label>
+              <input
+                id="merchant-rule-pattern"
+                value={ruleForm.pattern}
+                onChange={(event) => setRuleForm({ ...ruleForm, pattern: event.target.value })}
+                placeholder="mcdonalds"
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="merchant-rule-group">Group Name</label>
+              <input
+                id="merchant-rule-group"
+                value={ruleForm.group_name}
+                onChange={(event) => setRuleForm({ ...ruleForm, group_name: event.target.value })}
+                placeholder="Fast Food"
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="merchant-rule-match-type">Match Type</label>
+              <select
+                id="merchant-rule-match-type"
+                value={ruleForm.match_type}
+                onChange={(event) => setRuleForm({ ...ruleForm, match_type: event.target.value })}
+              >
+                <option value="contains">Contains</option>
+                <option value="starts_with">Starts With</option>
+                <option value="exact">Exact</option>
+              </select>
+            </div>
+
+            <div className="action-group">
+              <button className="button" type="submit">
+                {editingRuleId ? "Save Rule" : "Add Rule"}
+              </button>
+              {editingRuleId ? (
+                <button className="button button-secondary" type="button" onClick={resetRuleForm}>
+                  Cancel
+                </button>
+              ) : null}
+            </div>
+          </form>
+
+          {ruleError ? <div className="form-error">{ruleError}</div> : null}
+
+          <div className="visualize-breakdown">
+            {merchantRules.map((rule) => (
+              <div className="visualize-breakdown-row" key={rule.id}>
+                <div className="visualize-breakdown-main">
+                  <span className="visualize-swatch" style={{ background: "#5ea2ff" }} />
+                  <div>
+                    <div className="visualize-breakdown-label">{rule.group_name}</div>
+                    <div className="visualize-breakdown-subtitle">
+                      {rule.match_type} "{rule.pattern}"
+                    </div>
+                  </div>
+                </div>
+                <div className="action-group">
+                  <button className="table-action-button" type="button" onClick={() => startRuleEdit(rule)}>
+                    Edit
+                  </button>
+                  <button
+                    className="table-action-button table-action-button-danger"
+                    type="button"
+                    onClick={() => handleDeleteRule(rule)}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </aside>
 
       <div className="visualize-stage">
@@ -593,6 +753,8 @@ export default function Visualize({ transactions, month, categories }) {
               <p className="section-subtitle">
                 {groupBy === "description"
                   ? "Comparing transaction names."
+                  : groupBy === "merchant_group"
+                    ? "Comparing custom merchant groups."
                   : groupBy === "category"
                     ? "Comparing budget categories."
                     : "Showing daily movement across the month."}

@@ -427,7 +427,9 @@ export default function Dashboard({
                 <thead>
                   <tr>
                     <th>Category</th>
+                    <th>Mode</th>
                     <th>Budget</th>
+                    <th>Carryover</th>
                     <th>Spent</th>
                     <th>Remaining</th>
                   </tr>
@@ -445,7 +447,9 @@ export default function Dashboard({
                         }
                       >
                         <td className="budget-table-category">{category.category_name}</td>
+                        <td>{category.budget_mode.replaceAll("_", " ")}</td>
                         <td>{formatMoney(category.budget)}</td>
+                        <td>{formatMoney(category.carryover_balance)}</td>
                         <td>{formatMoney(category.spent)}</td>
                         <td className={`category-remaining ${remainingClass}`}>
                           {formatMoney(category.remaining)}

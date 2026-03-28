@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from .. import crud, schemas
@@ -11,6 +12,17 @@ router = APIRouter(tags=["categories"])
 @router.get("/categories", response_model=list[schemas.AllowanceCategoryRead])
 def get_categories(db: Session = Depends(get_db)):
     return crud.list_categories(db)
+
+
+@router.get("/categories/export")
+def export_categories(month: str | None = None, db: Session = Depends(get_db)):
+    csv_text = crud.export_category_summary_csv(db, month)
+    filename = f"madibudget-category-summary-{month or 'current'}.csv"
+    return PlainTextResponse(
+        csv_text,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/categories", response_model=schemas.AllowanceCategoryRead, status_code=201)

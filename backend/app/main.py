@@ -7,7 +7,7 @@ from sqlalchemy import inspect, text
 from . import auth, models
 from .db import Base, engine
 from .routers import auth as auth_router
-from .routers import bills, categories, dashboard, incomes, plan, transactions
+from .routers import bills, categories, dashboard, incomes, merchant_rules, plan, transactions, users
 
 
 def _cors_origins() -> list[str]:
@@ -50,6 +50,14 @@ app.add_middleware(
 def _ensure_schema_updates():
     inspector = inspect(engine)
 
+    def ensure_column(table_name: str, column_name: str, definition_sql: str):
+        if table_name not in inspector.get_table_names():
+            return
+        existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+        if column_name not in existing_columns:
+            with engine.begin() as connection:
+                connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {definition_sql}"))
+
     if "transactions" in inspector.get_table_names():
         transaction_columns = {
             column["name"] for column in inspector.get_columns("transactions")
@@ -70,6 +78,10 @@ def _ensure_schema_updates():
                         "ADD COLUMN fixed_expense_payment_id INTEGER"
                     )
                 )
+        ensure_column("transactions", "note", "note VARCHAR(2000)")
+        ensure_column("transactions", "receipt_path", "receipt_path VARCHAR(500)")
+        ensure_column("transactions", "receipt_name", "receipt_name VARCHAR(255)")
+        ensure_column("transactions", "receipt_content_type", "receipt_content_type VARCHAR(120)")
 
         category_column = next(
             (column for column in inspector.get_columns("transactions") if column["name"] == "category_id"),
@@ -97,6 +109,26 @@ def _ensure_schema_updates():
                     )
                 )
 
+    ensure_column("users", "session_version", "session_version INTEGER NOT NULL DEFAULT 0")
+    ensure_column(
+        "allowance_categories",
+        "budget_mode",
+        "budget_mode VARCHAR(30) NOT NULL DEFAULT 'monthly_reset'",
+    )
+    ensure_column(
+        "allowance_categories",
+        "starting_balance",
+        "starting_balance NUMERIC(10, 2) NOT NULL DEFAULT 0",
+    )
+    ensure_column("fixed_expense_payments", "note", "note VARCHAR(2000)")
+    ensure_column("fixed_expense_payments", "receipt_path", "receipt_path VARCHAR(500)")
+    ensure_column("fixed_expense_payments", "receipt_name", "receipt_name VARCHAR(255)")
+    ensure_column(
+        "fixed_expense_payments",
+        "receipt_content_type",
+        "receipt_content_type VARCHAR(120)",
+    )
+
 
 @app.on_event("startup")
 def on_startup():
@@ -116,4 +148,6 @@ app.include_router(incomes.router, dependencies=[Depends(auth.require_current_us
 app.include_router(bills.router, dependencies=[Depends(auth.require_current_user)])
 app.include_router(categories.router, dependencies=[Depends(auth.require_current_user)])
 app.include_router(transactions.router, dependencies=[Depends(auth.require_current_user)])
+app.include_router(merchant_rules.router, dependencies=[Depends(auth.require_current_user)])
+app.include_router(users.router, dependencies=[Depends(auth.require_current_user)])
 app.include_router(plan.router, dependencies=[Depends(auth.require_current_user)])

@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { api } from "../api";
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -17,20 +18,34 @@ function formatSignedMoney(amount, transactionType) {
 export default function TransactionList({
   transactions,
   categories,
+  merchantRules,
   month,
   onUpdate,
   onDelete,
+  onUploadReceipt,
+  onDeleteReceipt,
 }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [bucketFilter, setBucketFilter] = useState("all");
+  const [merchantGroupFilter, setMerchantGroupFilter] = useState("all");
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const fileInputRefs = useRef({});
+
+  const merchantGroupOptions = useMemo(
+    () => [...new Set(merchantRules.map((rule) => rule.group_name))].sort((a, b) => a.localeCompare(b)),
+    [merchantRules],
+  );
 
   const filteredTransactions = useMemo(() => {
     const search = searchQuery.trim().toLowerCase();
+    const minValue = minAmount ? Number(minAmount) : null;
+    const maxValue = maxAmount ? Number(maxAmount) : null;
 
     return transactions.filter((transaction) => {
       const bucketLabel =
@@ -40,16 +55,30 @@ export default function TransactionList({
       const matchesSearch =
         !search ||
         transaction.description.toLowerCase().includes(search) ||
-        bucketLabel.toLowerCase().includes(search);
+        bucketLabel.toLowerCase().includes(search) ||
+        (transaction.note || "").toLowerCase().includes(search) ||
+        (transaction.merchant_group || "").toLowerCase().includes(search);
       const matchesType = typeFilter === "all" || transaction.transaction_type === typeFilter;
       const matchesBucket =
         bucketFilter === "all" ||
         (bucketFilter === "__fixed_expenses__" && transaction.source_type === "fixed_expense") ||
         String(transaction.category_id) === bucketFilter;
+      const matchesMerchantGroup =
+        merchantGroupFilter === "all" || transaction.merchant_group === merchantGroupFilter;
+      const amount = Number(transaction.amount || 0);
+      const matchesMinAmount = minValue == null || amount >= minValue;
+      const matchesMaxAmount = maxValue == null || amount <= maxValue;
 
-      return matchesSearch && matchesType && matchesBucket;
+      return (
+        matchesSearch &&
+        matchesType &&
+        matchesBucket &&
+        matchesMerchantGroup &&
+        matchesMinAmount &&
+        matchesMaxAmount
+      );
     });
-  }, [transactions, searchQuery, typeFilter, bucketFilter]);
+  }, [transactions, searchQuery, typeFilter, bucketFilter, merchantGroupFilter, minAmount, maxAmount]);
 
   const transactionTotals = useMemo(() => {
     return filteredTransactions.reduce(
@@ -82,6 +111,7 @@ export default function TransactionList({
       date: transaction.date,
       transaction_type: transaction.transaction_type,
       category_id: String(transaction.category_id),
+      note: transaction.note || "",
     });
     setError("");
   }
@@ -96,6 +126,9 @@ export default function TransactionList({
     setSearchQuery("");
     setTypeFilter("all");
     setBucketFilter("all");
+    setMerchantGroupFilter("all");
+    setMinAmount("");
+    setMaxAmount("");
   }
 
   async function handleSave(transactionId) {
@@ -138,13 +171,43 @@ export default function TransactionList({
     }
   }
 
+  async function handleUpload(transaction, event) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setError("");
+    try {
+      await onUploadReceipt(transaction.id, file);
+    } catch (uploadError) {
+      setError(uploadError.message || "Unable to upload receipt.");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  async function handleDeleteReceipt(transaction) {
+    const confirmed = window.confirm(`Remove the receipt from "${transaction.description}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    try {
+      await onDeleteReceipt(transaction.id);
+    } catch (deleteError) {
+      setError(deleteError.message || "Unable to delete receipt.");
+    }
+  }
+
   return (
     <section className="section-card section-card-sheet">
       <div className="section-title-row">
         <div>
           <h2>Transaction Register</h2>
           <p className="section-subtitle">
-            Ledger view of all cash activity for {month}, including fixed expenses that were marked paid.
+            Search, filter, annotate, and attach receipts to the activity recorded for {month}.
           </p>
         </div>
         <span className="section-count">
@@ -164,25 +227,21 @@ export default function TransactionList({
           <strong>{formatMoney(transactionTotals.moneyIn)}</strong>
         </div>
 
-        <div
-          className={`summary-tile ${
-            transactionTotals.net < 0 ? "summary-tile-warning" : ""
-          }`}
-        >
+        <div className={`summary-tile ${transactionTotals.net < 0 ? "summary-tile-warning" : ""}`}>
           <span className="summary-list-label">Filtered Net Flow</span>
           <strong>{formatMoney(transactionTotals.net)}</strong>
         </div>
       </div>
 
       <div className="sheet-entry-form register-toolbar">
-        <div className="register-toolbar-grid">
+        <div className="register-toolbar-grid register-toolbar-grid-transactions">
           <div className="field">
             <label htmlFor="transaction-search">Search</label>
             <input
               id="transaction-search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search merchant, fixed expense, or category"
+              placeholder="Search merchant, notes, group, fixed expense, or category"
             />
           </div>
 
@@ -216,10 +275,69 @@ export default function TransactionList({
             </select>
           </div>
 
+          <div className="field">
+            <label htmlFor="merchant-group-filter">Merchant Group</label>
+            <select
+              id="merchant-group-filter"
+              value={merchantGroupFilter}
+              onChange={(event) => setMerchantGroupFilter(event.target.value)}
+            >
+              <option value="all">All groups</option>
+              {merchantGroupOptions.map((group) => (
+                <option key={group} value={group}>
+                  {group}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="transaction-min-amount">Min Amount</label>
+            <input
+              id="transaction-min-amount"
+              type="number"
+              step="0.01"
+              value={minAmount}
+              onChange={(event) => setMinAmount(event.target.value)}
+              placeholder="0.00"
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="transaction-max-amount">Max Amount</label>
+            <input
+              id="transaction-max-amount"
+              type="number"
+              step="0.01"
+              value={maxAmount}
+              onChange={(event) => setMaxAmount(event.target.value)}
+              placeholder="500.00"
+            />
+          </div>
+
           <div className="sheet-entry-actions">
             <div className="action-group action-group-compact">
               <button className="button button-secondary" type="button" onClick={clearFilters}>
                 Clear Filters
+              </button>
+              <button
+                className="button button-secondary"
+                type="button"
+                onClick={() => api.exportTransactionsCsv(
+                  {
+                    month,
+                    q: searchQuery,
+                    category_id: bucketFilter !== "all" && bucketFilter !== "__fixed_expenses__" ? bucketFilter : "",
+                    transaction_type: typeFilter !== "all" ? typeFilter : "",
+                    source_type: bucketFilter === "__fixed_expenses__" ? "fixed_expense" : "",
+                    merchant_group: merchantGroupFilter !== "all" ? merchantGroupFilter : "",
+                    min_amount: minAmount,
+                    max_amount: maxAmount,
+                  },
+                  month,
+                )}
+              >
+                Export CSV
               </button>
             </div>
           </div>
@@ -241,9 +359,11 @@ export default function TransactionList({
                 <th>Date</th>
                 <th>Description</th>
                 <th>Bucket</th>
-                <th>Source</th>
+                <th>Merchant Group</th>
                 <th>Type</th>
                 <th>Amount</th>
+                <th>Notes</th>
+                <th>Receipt</th>
                 <th className="actions-column">Actions</th>
               </tr>
             </thead>
@@ -302,15 +422,7 @@ export default function TransactionList({
                         bucketLabel
                       )}
                     </td>
-                    <td>
-                      <span
-                        className={`table-pill ${
-                          transaction.source_type === "fixed_expense" ? "fixed-expense" : "allowance"
-                        }`}
-                      >
-                        {transaction.source_type === "fixed_expense" ? "Fixed Expense" : "Allowance"}
-                      </span>
-                    </td>
+                    <td>{transaction.merchant_group || "Unmatched"}</td>
                     <td>
                       {isEditing ? (
                         <select
@@ -352,6 +464,68 @@ export default function TransactionList({
                           {formatSignedMoney(transaction.amount, transaction.transaction_type)}
                         </span>
                       )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <input
+                          className="inline-row-input"
+                          value={editForm.note}
+                          onChange={(event) =>
+                            setEditForm({ ...editForm, note: event.target.value })
+                          }
+                        />
+                      ) : (
+                        transaction.note || "-"
+                      )}
+                    </td>
+                    <td>
+                      <div className="action-group">
+                        {transaction.has_receipt ? (
+                          <>
+                            <button
+                              className="table-action-button"
+                              type="button"
+                              onClick={() =>
+                                api.downloadTransactionReceipt(
+                                  transaction.id,
+                                  transaction.receipt_name || `${transaction.description}.jpg`,
+                                )
+                              }
+                            >
+                              View
+                            </button>
+                            {!transaction.locked ? (
+                              <button
+                                className="table-action-button table-action-button-danger"
+                                type="button"
+                                onClick={() => handleDeleteReceipt(transaction)}
+                              >
+                                Remove
+                              </button>
+                            ) : null}
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              className="table-action-button"
+                              type="button"
+                              onClick={() => fileInputRefs.current[transaction.id]?.click()}
+                              disabled={transaction.locked}
+                            >
+                              Upload
+                            </button>
+                            <input
+                              ref={(node) => {
+                                fileInputRefs.current[transaction.id] = node;
+                              }}
+                              className="hidden-file-input"
+                              type="file"
+                              accept="image/*,.pdf"
+                              onChange={(event) => handleUpload(transaction, event)}
+                            />
+                          </>
+                        )}
+                      </div>
                     </td>
                     <td className="actions-column">
                       <div className="action-group">

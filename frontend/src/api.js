@@ -46,14 +46,31 @@ function notifyAuthExpired() {
   }
 }
 
+function buildQuery(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+  const text = query.toString();
+  return text ? `?${text}` : "";
+}
+
 async function request(path, options = {}) {
+  const headers = {
+    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    ...(options.headers || {}),
+  };
+
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  if (!isFormData && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-      ...(options.headers || {}),
-    },
     ...options,
+    headers,
   });
 
   const contentType = response.headers.get("content-type") || "";
@@ -97,6 +114,39 @@ async function request(path, options = {}) {
   return response.json();
 }
 
+async function uploadFile(path, file) {
+  const formData = new FormData();
+  formData.append("receipt", file);
+  return request(path, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+async function downloadFile(path, filename) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: {
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    const error = new Error("Unable to download file.");
+    error.status = response.status;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export const api = {
   hasAuthToken,
   setAuthToken,
@@ -113,6 +163,25 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   getMe: () => request("/auth/me"),
+  changePassword: (payload) =>
+    request("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  logoutAllSessions: () =>
+    request("/auth/logout-all", {
+      method: "POST",
+    }),
+  getUsers: () => request("/users"),
+  createUser: (payload) =>
+    request("/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  deleteUser: (id) =>
+    request(`/users/${id}`, {
+      method: "DELETE",
+    }),
   getDashboard: (month) => request(`/dashboard?month=${encodeURIComponent(month)}`),
   getPlan: (month) => request(`/plan?month=${encodeURIComponent(month)}`),
   getCashPosition: () => request("/cash-position"),
@@ -176,6 +245,16 @@ export const api = {
     request(`/bills/${id}/payment?month=${encodeURIComponent(month)}`, {
       method: "DELETE",
     }),
+  uploadBillPaymentReceipt: (id, month, file) =>
+    uploadFile(`/bills/${id}/payment/receipt${buildQuery({ month })}`, file),
+  deleteBillPaymentReceipt: (id, month) =>
+    request(`/bills/${id}/payment/receipt${buildQuery({ month })}`, {
+      method: "DELETE",
+    }),
+  downloadBillPaymentReceipt: (id, month, filename = "fixed-expense-receipt") =>
+    downloadFile(`/bills/${id}/payment/receipt${buildQuery({ month })}`, filename),
+  exportBillsCsv: (month) =>
+    downloadFile(`/bills/export${buildQuery({ month })}`, `madibudget-fixed-expenses-${month}.csv`),
   getCategories: () => request("/categories"),
   createCategory: (payload) =>
     request("/categories", {
@@ -191,7 +270,24 @@ export const api = {
     request(`/categories/${id}`, {
       method: "DELETE",
     }),
-  getTransactions: (month) => request(`/transactions?month=${encodeURIComponent(month)}`),
+  exportCategoriesCsv: (month) =>
+    downloadFile(`/categories/export${buildQuery({ month })}`, `madibudget-categories-${month}.csv`),
+  getMerchantRules: () => request("/merchant-rules"),
+  createMerchantRule: (payload) =>
+    request("/merchant-rules", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateMerchantRule: (id, payload) =>
+    request(`/merchant-rules/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteMerchantRule: (id) =>
+    request(`/merchant-rules/${id}`, {
+      method: "DELETE",
+    }),
+  getTransactions: (filters = {}) => request(`/transactions${buildQuery(filters)}`),
   createTransaction: (payload) =>
     request("/transactions", {
       method: "POST",
@@ -206,4 +302,16 @@ export const api = {
     request(`/transactions/${id}`, {
       method: "DELETE",
     }),
+  uploadTransactionReceipt: (id, file) => uploadFile(`/transactions/${id}/receipt`, file),
+  deleteTransactionReceipt: (id) =>
+    request(`/transactions/${id}/receipt`, {
+      method: "DELETE",
+    }),
+  downloadTransactionReceipt: (id, filename = "transaction-receipt") =>
+    downloadFile(`/transactions/${id}/receipt`, filename),
+  exportTransactionsCsv: (filters = {}, month = "current") =>
+    downloadFile(
+      `/transactions/export${buildQuery(filters)}`,
+      `madibudget-transactions-${month}.csv`,
+    ),
 };

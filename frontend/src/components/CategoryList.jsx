@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { api } from "../api";
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -12,11 +13,14 @@ function formatMoney(value) {
 const initialForm = {
   name: "",
   monthly_budget: "",
+  budget_mode: "monthly_reset",
+  starting_balance: "0",
 };
 
-export default function CategoryList({ categories, onCreate, onUpdate, onDelete }) {
+export default function CategoryList({ categories, month, onCreate, onUpdate, onDelete }) {
   const [form, setForm] = useState(initialForm);
   const [searchQuery, setSearchQuery] = useState("");
+  const [modeFilter, setModeFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -28,25 +32,22 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
 
   const filteredCategories = useMemo(() => {
     const search = searchQuery.trim().toLowerCase();
-    if (!search) {
-      return sortedCategories;
-    }
-
-    return sortedCategories.filter((category) => category.name.toLowerCase().includes(search));
-  }, [sortedCategories, searchQuery]);
+    return sortedCategories.filter((category) => {
+      const matchesSearch = !search || category.name.toLowerCase().includes(search);
+      const matchesMode = modeFilter === "all" || category.budget_mode === modeFilter;
+      return matchesSearch && matchesMode;
+    });
+  }, [sortedCategories, searchQuery, modeFilter]);
 
   const categorySummary = useMemo(() => {
     const totalBudget = sortedCategories.reduce(
       (sum, category) => sum + Number(category.monthly_budget || 0),
       0,
     );
-    const largestCategory =
-      [...sortedCategories].sort(
-        (a, b) => Number(b.monthly_budget) - Number(a.monthly_budget),
-      )[0] || null;
-    const averageBudget = sortedCategories.length ? totalBudget / sortedCategories.length : 0;
-
-    return { totalBudget, largestCategory, averageBudget };
+    const rolloverCount = sortedCategories.filter(
+      (category) => category.budget_mode !== "monthly_reset",
+    ).length;
+    return { totalBudget, rolloverCount };
   }, [sortedCategories]);
 
   function resetForm() {
@@ -60,6 +61,8 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
     setForm({
       name: category.name,
       monthly_budget: String(category.monthly_budget),
+      budget_mode: category.budget_mode,
+      starting_balance: String(category.starting_balance ?? 0),
     });
     setError("");
   }
@@ -72,6 +75,7 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
     const payload = {
       ...form,
       monthly_budget: Number(form.monthly_budget),
+      starting_balance: Number(form.starting_balance || 0),
     };
 
     try {
@@ -111,7 +115,7 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
         <div>
           <h2>Allowance Categories</h2>
           <p className="section-subtitle">
-            Manage the budget categories that every transaction must use.
+            Monthly reset categories start fresh. Rollover and sinking fund categories carry money forward.
           </p>
         </div>
         <span className="section-count">
@@ -122,27 +126,25 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
 
       <div className="summary-stack summary-stack-income">
         <div className="summary-tile">
-          <span className="summary-list-label">Total Budgeted</span>
+          <span className="summary-list-label">Total Monthly Budgeted</span>
           <strong>{formatMoney(categorySummary.totalBudget)}</strong>
         </div>
 
         <div className="summary-tile">
-          <span className="summary-list-label">Average Category</span>
-          <strong>{formatMoney(categorySummary.averageBudget)}</strong>
+          <span className="summary-list-label">Carryover Categories</span>
+          <strong>{categorySummary.rolloverCount}</strong>
         </div>
 
         <div className="summary-tile summary-tile-safe">
-          <span className="summary-list-label">Largest Category</span>
-          <strong>
-            {categorySummary.largestCategory
-              ? `${categorySummary.largestCategory.name} - ${formatMoney(categorySummary.largestCategory.monthly_budget)}`
-              : "None"}
-          </strong>
+          <span className="summary-list-label">Export</span>
+          <button className="button button-secondary" type="button" onClick={() => api.exportCategoriesCsv(month)}>
+            Download CSV
+          </button>
         </div>
       </div>
 
       <form className="sheet-entry-form" onSubmit={handleSubmit}>
-        <div className="sheet-entry-grid sheet-entry-grid-categories">
+        <div className="sheet-entry-grid sheet-entry-grid-categories-advanced">
           <div className="field">
             <label htmlFor="category-name">Category Name</label>
             <input
@@ -168,6 +170,31 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
             />
           </div>
 
+          <div className="field">
+            <label htmlFor="category-mode">Mode</label>
+            <select
+              id="category-mode"
+              value={form.budget_mode}
+              onChange={(event) => setForm({ ...form, budget_mode: event.target.value })}
+            >
+              <option value="monthly_reset">Monthly Reset</option>
+              <option value="rollover">Rollover</option>
+              <option value="sinking_fund">Sinking Fund</option>
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="category-starting-balance">Starting Balance</label>
+            <input
+              id="category-starting-balance"
+              type="number"
+              step="0.01"
+              value={form.starting_balance}
+              onChange={(event) => setForm({ ...form, starting_balance: event.target.value })}
+              placeholder="0.00"
+            />
+          </div>
+
           <div className="sheet-entry-actions">
             <div className="action-group action-group-compact">
               <button className="button" type="submit" disabled={submitting}>
@@ -186,7 +213,7 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
       </form>
 
       <div className="sheet-entry-form register-toolbar">
-        <div className="register-toolbar-grid register-toolbar-grid-bills">
+        <div className="register-toolbar-grid register-toolbar-grid-categories">
           <div className="field">
             <label htmlFor="category-search">Search Categories</label>
             <input
@@ -197,65 +224,70 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
             />
           </div>
 
+          <div className="field">
+            <label htmlFor="category-mode-filter">Mode</label>
+            <select
+              id="category-mode-filter"
+              value={modeFilter}
+              onChange={(event) => setModeFilter(event.target.value)}
+            >
+              <option value="all">All modes</option>
+              <option value="monthly_reset">Monthly Reset</option>
+              <option value="rollover">Rollover</option>
+              <option value="sinking_fund">Sinking Fund</option>
+            </select>
+          </div>
+
           <div className="sheet-entry-actions">
-            <div className="action-group action-group-compact">
-              <button
-                className="button button-secondary"
-                type="button"
-                onClick={() => setSearchQuery("")}
-              >
-                Clear Search
-              </button>
-            </div>
+            <button className="button button-secondary" type="button" onClick={() => {
+              setSearchQuery("");
+              setModeFilter("all");
+            }}>
+              Clear Filters
+            </button>
           </div>
         </div>
       </div>
 
-      {sortedCategories.length === 0 ? (
-        <p className="empty-state">No allowance categories added yet.</p>
-      ) : filteredCategories.length === 0 ? (
-        <p className="empty-state">No categories match the current search.</p>
-      ) : (
-        <div className="budget-table-wrap ledger-table-wrap">
-          <table className="transaction-table ledger-table">
-            <thead>
-              <tr>
-                <th className="row-number-column">#</th>
-                <th>Category</th>
-                <th>Monthly Budget</th>
-                <th className="actions-column">Actions</th>
+      <div className="budget-table-wrap ledger-table-wrap">
+        <table className="transaction-table ledger-table">
+          <thead>
+            <tr>
+              <th className="row-number-column">#</th>
+              <th>Category</th>
+              <th>Mode</th>
+              <th>Monthly Budget</th>
+              <th>Starting Balance</th>
+              <th className="actions-column">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredCategories.map((category, index) => (
+              <tr key={category.id}>
+                <td className="row-number-column">{index + 1}</td>
+                <td className="budget-table-category">{category.name}</td>
+                <td>{category.budget_mode.replaceAll("_", " ")}</td>
+                <td>{formatMoney(category.monthly_budget)}</td>
+                <td>{formatMoney(category.starting_balance)}</td>
+                <td className="actions-column">
+                  <div className="action-group">
+                    <button className="table-action-button" type="button" onClick={() => startEdit(category)}>
+                      Edit
+                    </button>
+                    <button
+                      className="table-action-button table-action-button-danger"
+                      type="button"
+                      onClick={() => handleDelete(category)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {filteredCategories.map((category, index) => (
-                <tr key={category.id}>
-                  <td className="row-number-column">{index + 1}</td>
-                  <td className="budget-table-category">{category.name}</td>
-                  <td>{formatMoney(category.monthly_budget)}</td>
-                  <td className="actions-column">
-                    <div className="action-group">
-                      <button
-                        className="table-action-button"
-                        type="button"
-                        onClick={() => startEdit(category)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="table-action-button table-action-button-danger"
-                        type="button"
-                        onClick={() => handleDelete(category)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

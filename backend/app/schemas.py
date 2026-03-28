@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -9,6 +9,8 @@ Frequency = Literal["weekly", "biweekly", "monthly"]
 BillType = Literal["bill", "chapter13"]
 TransactionDirection = Literal["expense", "income"]
 TransactionSource = Literal["allowance", "fixed_expense"]
+BudgetMode = Literal["monthly_reset", "rollover", "sinking_fund"]
+MerchantMatchType = Literal["contains", "exact", "starts_with"]
 
 
 class IncomeSourceBase(BaseModel):
@@ -57,6 +59,7 @@ class UserRead(BaseModel):
     id: int
     username: str
     is_active: bool
+    created_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -68,6 +71,15 @@ class LoginRequest(BaseModel):
 
 class UserSetupCreate(LoginRequest):
     pass
+
+
+class UserCreate(LoginRequest):
+    pass
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 
 class AuthStatusRead(BaseModel):
@@ -113,6 +125,7 @@ class BillUpdate(BillBase):
 class BillPaymentUpdate(BaseModel):
     month: str
     paid_date: date
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class BillRead(BillBase):
@@ -120,6 +133,9 @@ class BillRead(BillBase):
     due_date_for_month: date | None = None
     paid_date: date | None = None
     is_paid_for_month: bool = False
+    payment_note: str | None = None
+    payment_has_receipt: bool = False
+    payment_receipt_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -127,6 +143,8 @@ class BillRead(BillBase):
 class AllowanceCategoryBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     monthly_budget: Decimal = Field(..., ge=0)
+    budget_mode: BudgetMode = "monthly_reset"
+    starting_balance: Decimal = Field(default=Decimal("0.00"))
 
 
 class AllowanceCategoryCreate(AllowanceCategoryBase):
@@ -143,12 +161,34 @@ class AllowanceCategoryRead(AllowanceCategoryBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MerchantRuleBase(BaseModel):
+    pattern: str = Field(..., min_length=1, max_length=255)
+    group_name: str = Field(..., min_length=1, max_length=120)
+    match_type: MerchantMatchType = "contains"
+    active: bool = True
+
+
+class MerchantRuleCreate(MerchantRuleBase):
+    pass
+
+
+class MerchantRuleUpdate(MerchantRuleBase):
+    pass
+
+
+class MerchantRuleRead(MerchantRuleBase):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class TransactionCreate(BaseModel):
     description: str = Field(..., min_length=1, max_length=255)
     amount: Decimal = Field(..., gt=0)
     date: date
     transaction_type: TransactionDirection = "expense"
     category_id: int
+    note: str | None = Field(default=None, max_length=2000)
 
 
 class TransactionUpdate(TransactionCreate):
@@ -163,6 +203,10 @@ class TransactionRead(BaseModel):
     transaction_type: TransactionDirection
     category_id: int | None = None
     category_name: str | None = None
+    merchant_group: str | None = None
+    note: str | None = None
+    has_receipt: bool = False
+    receipt_name: str | None = None
     source_type: TransactionSource = "allowance"
     fixed_expense_id: int | None = None
     fixed_expense_name: str | None = None
@@ -175,8 +219,11 @@ class CategorySummary(BaseModel):
     category_id: int
     category_name: str
     budget: Decimal
+    monthly_budget: Decimal
     spent: Decimal
     remaining: Decimal
+    budget_mode: BudgetMode
+    carryover_balance: Decimal
 
 
 class DashboardResponse(BaseModel):

@@ -23,6 +23,7 @@ class User(Base):
     username = Column(String(80), nullable=False, unique=True, index=True)
     password_hash = Column(String(255), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    session_version = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
@@ -63,8 +64,20 @@ class AllowanceCategory(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(120), nullable=False, unique=True)
     monthly_budget = Column(Numeric(10, 2), nullable=False)
+    budget_mode = Column(String(30), nullable=False, default="monthly_reset", server_default="monthly_reset")
+    starting_balance = Column(Numeric(10, 2), nullable=False, default=0, server_default="0")
 
     transactions = relationship("Transaction", back_populates="category", cascade="all, delete")
+
+
+class MerchantRule(Base):
+    __tablename__ = "merchant_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pattern = Column(String(255), nullable=False, unique=True)
+    group_name = Column(String(120), nullable=False, index=True)
+    match_type = Column(String(30), nullable=False, default="contains", server_default="contains")
+    active = Column(Boolean, nullable=False, default=True, server_default="true")
 
 
 class FixedExpensePayment(Base):
@@ -77,6 +90,10 @@ class FixedExpensePayment(Base):
     bill_id = Column(Integer, ForeignKey("bills.id"), nullable=False)
     month_label = Column(String(7), nullable=False, index=True)
     paid_date = Column(Date, nullable=False)
+    note = Column(String(2000), nullable=True)
+    receipt_path = Column(String(500), nullable=True)
+    receipt_name = Column(String(255), nullable=True)
+    receipt_content_type = Column(String(120), nullable=True)
 
     bill = relationship("Bill", back_populates="payments")
     transaction = relationship(
@@ -96,6 +113,10 @@ class Transaction(Base):
     date = Column(Date, nullable=False)
     transaction_type = Column(String(20), nullable=False, default="expense", server_default="expense")
     category_id = Column(Integer, ForeignKey("allowance_categories.id"), nullable=True)
+    note = Column(String(2000), nullable=True)
+    receipt_path = Column(String(500), nullable=True)
+    receipt_name = Column(String(255), nullable=True)
+    receipt_content_type = Column(String(120), nullable=True)
     fixed_expense_payment_id = Column(
         Integer,
         ForeignKey("fixed_expense_payments.id"),

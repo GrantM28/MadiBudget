@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api } from "../api";
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -27,45 +28,42 @@ export default function BillList({
   onDelete,
   onSetPayment,
   onClearPayment,
+  onUploadReceipt,
+  onDeleteReceipt,
 }) {
   const [form, setForm] = useState(initialForm);
   const [paymentDrafts, setPaymentDrafts] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const fileInputRefs = useRef({});
 
   useEffect(() => {
     const nextDrafts = {};
     bills.forEach((bill) => {
-      nextDrafts[bill.id] = bill.paid_date || bill.due_date_for_month || todayValue();
+      nextDrafts[bill.id] = {
+        paid_date: bill.paid_date || bill.due_date_for_month || todayValue(),
+        note: bill.payment_note || "",
+      };
     });
     setPaymentDrafts(nextDrafts);
   }, [bills, month]);
 
-  const sortedBills = useMemo(
-    () => [...bills].sort((a, b) => a.due_day - b.due_day || a.name.localeCompare(b.name)),
-    [bills],
-  );
-
   const filteredBills = useMemo(() => {
     const search = searchQuery.trim().toLowerCase();
-    if (!search) {
-      return sortedBills;
-    }
-
-    return sortedBills.filter((bill) => bill.name.toLowerCase().includes(search));
-  }, [sortedBills, searchQuery]);
-
-  const fixedExpenseSummary = useMemo(() => {
-    const scheduledTotal = sortedBills.reduce((sum, bill) => sum + Number(bill.amount || 0), 0);
-    const paidTotal = sortedBills
-      .filter((bill) => bill.is_paid_for_month)
-      .reduce((sum, bill) => sum + Number(bill.amount || 0), 0);
-    const unpaidCount = sortedBills.filter((bill) => !bill.is_paid_for_month).length;
-
-    return { scheduledTotal, paidTotal, unpaidCount };
-  }, [sortedBills]);
+    return [...bills]
+      .sort((a, b) => a.due_day - b.due_day || a.name.localeCompare(b.name))
+      .filter((bill) => {
+        const matchesSearch = !search || bill.name.toLowerCase().includes(search);
+        const matchesStatus =
+          statusFilter === "all" ||
+          (statusFilter === "paid" && bill.is_paid_for_month) ||
+          (statusFilter === "unpaid" && !bill.is_paid_for_month);
+        return matchesSearch && matchesStatus;
+      });
+  }, [bills, searchQuery, statusFilter]);
 
   function resetForm() {
     setForm(initialForm);
@@ -128,8 +126,8 @@ export default function BillList({
   }
 
   async function handleSetPaidDate(bill) {
-    const paidDate = paymentDrafts[bill.id];
-    if (!paidDate) {
+    const draft = paymentDrafts[bill.id];
+    if (!draft?.paid_date) {
       setError("Choose a paid date before saving the fixed expense payment.");
       return;
     }
@@ -139,7 +137,8 @@ export default function BillList({
     try {
       await onSetPayment(bill.id, {
         month,
-        paid_date: paidDate,
+        paid_date: draft.paid_date,
+        note: draft.note,
       });
     } catch (submitError) {
       setError(submitError.message || "Unable to save the fixed expense payment.");
@@ -167,35 +166,47 @@ export default function BillList({
     }
   }
 
+  async function handleUploadReceipt(bill, event) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      await onUploadReceipt(bill.id, file);
+    } catch (uploadError) {
+      setError(uploadError.message || "Unable to upload receipt.");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
   return (
     <section className="section-card section-card-sheet">
       <div className="section-title-row">
         <div>
           <h2>Fixed Expenses</h2>
           <p className="section-subtitle">
-            Manage recurring obligations like mortgage, car payments, internet, and phone, then mark them paid for the selected month.
+            Track due dates, paid dates, payment notes, and receipt files without double-counting.
           </p>
         </div>
-        <span className="section-count">
-          {filteredBills.length}
-          {filteredBills.length !== bills.length ? ` / ${bills.length}` : ""}
-        </span>
+        <span className="section-count">{filteredBills.length}</span>
       </div>
 
       <div className="summary-stack summary-stack-income">
         <div className="summary-tile">
           <span className="summary-list-label">Scheduled This Month</span>
-          <strong>{formatMoney(fixedExpenseSummary.scheduledTotal)}</strong>
+          <strong>{formatMoney(bills.reduce((sum, bill) => sum + Number(bill.amount || 0), 0))}</strong>
         </div>
-
         <div className="summary-tile summary-tile-safe">
           <span className="summary-list-label">Marked Paid</span>
-          <strong>{formatMoney(fixedExpenseSummary.paidTotal)}</strong>
+          <strong>{bills.filter((bill) => bill.is_paid_for_month).length}</strong>
         </div>
-
-        <div className="summary-tile summary-tile-warning">
-          <span className="summary-list-label">Still Unpaid</span>
-          <strong>{fixedExpenseSummary.unpaidCount}</strong>
+        <div className="summary-tile">
+          <span className="summary-list-label">Export</span>
+          <button className="button button-secondary" type="button" onClick={() => api.exportBillsCsv(month)}>
+            Download CSV
+          </button>
         </div>
       </div>
 
@@ -254,60 +265,65 @@ export default function BillList({
           </div>
         </div>
 
-        <p className="helper-text">
-          Marking a fixed expense paid will automatically create a locked transaction row for the same payment, so you do not have to enter it twice.
-        </p>
-
         {error ? <div className="form-error">{error}</div> : null}
       </form>
 
       <div className="sheet-entry-form register-toolbar">
-        <div className="register-toolbar-grid register-toolbar-grid-bills">
+        <div className="register-toolbar-grid register-toolbar-grid-categories">
           <div className="field">
             <label htmlFor="bill-search">Search Fixed Expenses</label>
             <input
               id="bill-search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search by fixed expense name"
+              placeholder="Search fixed expense name"
             />
           </div>
 
+          <div className="field">
+            <label htmlFor="bill-status-filter">Status</label>
+            <select
+              id="bill-status-filter"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              <option value="all">All</option>
+              <option value="paid">Paid</option>
+              <option value="unpaid">Unpaid</option>
+            </select>
+          </div>
+
           <div className="sheet-entry-actions">
-            <div className="action-group action-group-compact">
-              <button
-                className="button button-secondary"
-                type="button"
-                onClick={() => setSearchQuery("")}
-              >
-                Clear Search
-              </button>
-            </div>
+            <button className="button button-secondary" type="button" onClick={() => {
+              setSearchQuery("");
+              setStatusFilter("all");
+            }}>
+              Clear Filters
+            </button>
           </div>
         </div>
       </div>
 
-      {sortedBills.length === 0 ? (
-        <p className="empty-state">No fixed expenses added yet.</p>
-      ) : filteredBills.length === 0 ? (
-        <p className="empty-state">No fixed expenses match the current search.</p>
-      ) : (
-        <div className="budget-table-wrap ledger-table-wrap">
-          <table className="transaction-table ledger-table">
-            <thead>
-              <tr>
-                <th className="row-number-column">#</th>
-                <th>Fixed Expense</th>
-                <th>Due Date</th>
-                <th>Paid Date</th>
-                <th>Status</th>
-                <th>Amount</th>
-                <th className="actions-column">Payment</th>
-                <th className="actions-column">Manage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredBills.map((bill, index) => (
+      <div className="budget-table-wrap ledger-table-wrap">
+        <table className="transaction-table ledger-table">
+          <thead>
+            <tr>
+              <th className="row-number-column">#</th>
+              <th>Fixed Expense</th>
+              <th>Due Date</th>
+              <th>Paid Date</th>
+              <th>Payment Note</th>
+              <th>Status</th>
+              <th>Amount</th>
+              <th>Receipt</th>
+              <th className="actions-column">Payment</th>
+              <th className="actions-column">Manage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredBills.map((bill, index) => {
+              const draft = paymentDrafts[bill.id] || { paid_date: "", note: "" };
+              return (
                 <tr key={bill.id}>
                   <td className="row-number-column">{index + 1}</td>
                   <td className="budget-table-category">{bill.name}</td>
@@ -316,13 +332,26 @@ export default function BillList({
                     <input
                       className="inline-row-input"
                       type="date"
-                      value={paymentDrafts[bill.id] || ""}
+                      value={draft.paid_date}
                       onChange={(event) =>
                         setPaymentDrafts((current) => ({
                           ...current,
-                          [bill.id]: event.target.value,
+                          [bill.id]: { ...current[bill.id], paid_date: event.target.value },
                         }))
                       }
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="inline-row-input"
+                      value={draft.note}
+                      onChange={(event) =>
+                        setPaymentDrafts((current) => ({
+                          ...current,
+                          [bill.id]: { ...current[bill.id], note: event.target.value },
+                        }))
+                      }
+                      placeholder="Optional note"
                     />
                   </td>
                   <td>
@@ -331,6 +360,52 @@ export default function BillList({
                     </span>
                   </td>
                   <td>{formatMoney(bill.amount)}</td>
+                  <td>
+                    {bill.payment_has_receipt ? (
+                      <div className="action-group">
+                        <button
+                          className="table-action-button"
+                          type="button"
+                          onClick={() =>
+                            api.downloadBillPaymentReceipt(
+                              bill.id,
+                              month,
+                              bill.payment_receipt_name || `${bill.name}.jpg`,
+                            )
+                          }
+                        >
+                          View
+                        </button>
+                        <button
+                          className="table-action-button table-action-button-danger"
+                          type="button"
+                          onClick={() => onDeleteReceipt(bill.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          className="table-action-button"
+                          type="button"
+                          onClick={() => fileInputRefs.current[bill.id]?.click()}
+                          disabled={!bill.is_paid_for_month}
+                        >
+                          Upload
+                        </button>
+                        <input
+                          ref={(node) => {
+                            fileInputRefs.current[bill.id] = node;
+                          }}
+                          className="hidden-file-input"
+                          type="file"
+                          accept="image/*,.pdf"
+                          onChange={(event) => handleUploadReceipt(bill, event)}
+                        />
+                      </>
+                    )}
+                  </td>
                   <td className="actions-column">
                     <div className="action-group">
                       <button
@@ -355,11 +430,7 @@ export default function BillList({
                   </td>
                   <td className="actions-column">
                     <div className="action-group">
-                      <button
-                        className="table-action-button"
-                        type="button"
-                        onClick={() => startEdit(bill)}
-                      >
+                      <button className="table-action-button" type="button" onClick={() => startEdit(bill)}>
                         Edit
                       </button>
                       <button
@@ -372,11 +443,11 @@ export default function BillList({
                     </div>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

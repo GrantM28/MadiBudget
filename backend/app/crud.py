@@ -1,19 +1,32 @@
+import csv
+import io
+import os
+import uuid
 from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 from math import ceil, floor
+from pathlib import Path
 
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from . import models, schemas
+from . import auth, models, schemas
 
 
 ZERO = Decimal("0.00")
+RECEIPTS_DIR = Path(os.getenv("RECEIPTS_DIR", str(Path(__file__).resolve().parent.parent / "uploads")))
 
 
 def _normalize_money(value: Decimal | None) -> Decimal:
     return (value or ZERO).quantize(Decimal("0.01"))
+
+
+def _clean_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
 
 
 def _month_bounds(month: str | None) -> tuple[date, date, str]:
@@ -33,10 +46,28 @@ def _month_bounds(month: str | None) -> tuple[date, date, str]:
         raise ValueError("Month must use YYYY-MM format.")
 
     start = date(year, month_number, 1)
-    last_day = monthrange(year, month_number)[1]
-    end = date(year, month_number, last_day)
-    label = f"{year:04d}-{month_number:02d}"
-    return start, end, label
+    end = date(year, month_number, monthrange(year, month_number)[1])
+    return start, end, f"{year:04d}-{month_number:02d}"
+
+
+def _month_label_from_date(value: date) -> str:
+    return value.strftime("%Y-%m")
+
+
+def _previous_month_label(label: str) -> str:
+    year, month_number = [int(part) for part in label.split("-")]
+    if month_number == 1:
+        year -= 1
+        month_number = 12
+    else:
+        month_number -= 1
+    return f"{year:04d}-{month_number:02d}"
+
+
+def _months_between_inclusive(start_label: str, end_label: str) -> int:
+    start_year, start_month = [int(part) for part in start_label.split("-")]
+    end_year, end_month = [int(part) for part in end_label.split("-")]
+    return (end_year - start_year) * 12 + (end_month - start_month) + 1
 
 
 def _due_date_for_month(due_day: int, month: str | None) -> date:
@@ -88,6 +119,68 @@ def _income_source_monthly_amount(
     return amount
 
 
+def _get_or_create_cash_position(db: Session) -> models.CashPosition:
+    record = db.scalar(select(models.CashPosition).order_by(models.CashPosition.id.asc()))
+    if record:
+        return record
+
+    record = models.CashPosition(
+        name="Checking",
+        current_balance=ZERO,
+        balance_as_of=date.today(),
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def _list_active_merchant_rules(db: Session) -> list[models.MerchantRule]:
+    rules = db.scalars(
+        select(models.MerchantRule)
+        .where(models.MerchantRule.active.is_(True))
+        .order_by(models.MerchantRule.group_name.asc(), models.MerchantRule.pattern.asc())
+    ).all()
+    return sorted(rules, key=lambda item: (-len(item.pattern or ""), item.pattern.lower()))
+
+
+def _resolve_merchant_group(description: str, rules: list[models.MerchantRule]) -> str | None:
+    normalized = description.strip().lower()
+    for rule in rules:
+        pattern = rule.pattern.strip().lower()
+        if not pattern:
+            continue
+        if rule.match_type == "exact" and normalized == pattern:
+            return rule.group_name
+        if rule.match_type == "starts_with" and normalized.startswith(pattern):
+            return rule.group_name
+        if rule.match_type == "contains" and pattern in normalized:
+            return rule.group_name
+    return None
+
+
+def _ensure_receipts_dir() -> Path:
+    RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
+    return RECEIPTS_DIR
+
+
+def _save_receipt(file_bytes: bytes, original_name: str, prefix: str) -> str:
+    receipts_dir = _ensure_receipts_dir()
+    extension = Path(original_name or "").suffix[:20]
+    filename = f"{prefix}_{uuid.uuid4().hex}{extension}"
+    destination = receipts_dir / filename
+    destination.write_bytes(file_bytes)
+    return str(destination)
+
+
+def _delete_receipt(path_value: str | None):
+    if not path_value:
+        return
+    path = Path(path_value)
+    if path.exists():
+        path.unlink()
+
+
 def _serialize_bill(
     bill: models.Bill,
     payment: models.FixedExpensePayment | None,
@@ -103,23 +196,141 @@ def _serialize_bill(
         due_date_for_month=_due_date_for_month(bill.due_day, month),
         paid_date=payment.paid_date if payment else None,
         is_paid_for_month=payment is not None,
+        payment_note=payment.note if payment else None,
+        payment_has_receipt=bool(payment and payment.receipt_path),
+        payment_receipt_name=payment.receipt_name if payment else None,
     )
 
 
-def _get_or_create_cash_position(db: Session) -> models.CashPosition:
-    record = db.scalar(select(models.CashPosition).order_by(models.CashPosition.id.asc()))
-    if record:
-        return record
+def _serialize_transaction_row(
+    transaction: models.Transaction,
+    category_name: str | None,
+    fixed_expense_id: int | None,
+    fixed_expense_name: str | None,
+    payment_note: str | None,
+    payment_receipt_path: str | None,
+    payment_receipt_name: str | None,
+    merchant_rules: list[models.MerchantRule],
+) -> schemas.TransactionRead:
+    is_fixed_expense = transaction.fixed_expense_payment_id is not None
+    receipt_path = payment_receipt_path if is_fixed_expense else transaction.receipt_path
+    receipt_name = payment_receipt_name if is_fixed_expense else transaction.receipt_name
+    note = payment_note if is_fixed_expense else transaction.note
 
-    record = models.CashPosition(
-        name="Checking",
-        current_balance=ZERO,
-        balance_as_of=date.today(),
+    return schemas.TransactionRead(
+        id=transaction.id,
+        description=transaction.description,
+        amount=transaction.amount,
+        date=transaction.date,
+        transaction_type=transaction.transaction_type,
+        category_id=transaction.category_id,
+        category_name=category_name,
+        merchant_group=_resolve_merchant_group(transaction.description, merchant_rules),
+        note=note,
+        has_receipt=bool(receipt_path),
+        receipt_name=receipt_name,
+        source_type="fixed_expense" if fixed_expense_id else "allowance",
+        fixed_expense_id=fixed_expense_id,
+        fixed_expense_name=fixed_expense_name,
+        locked=is_fixed_expense,
     )
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-    return record
+
+
+def _category_monthly_spend_up_to(db: Session, end: date) -> dict[int, dict[str, Decimal]]:
+    rows = db.scalars(
+        select(models.Transaction).where(
+            models.Transaction.date <= end,
+            models.Transaction.category_id.is_not(None),
+        )
+    ).all()
+
+    totals: dict[int, dict[str, Decimal]] = {}
+    for transaction in rows:
+        category_id = int(transaction.category_id)
+        month_label = _month_label_from_date(transaction.date)
+        contribution = Decimal(transaction.amount)
+        if transaction.transaction_type == "income":
+            contribution *= Decimal("-1")
+        category_totals = totals.setdefault(category_id, {})
+        category_totals[month_label] = _normalize_money(
+            category_totals.get(month_label, ZERO) + contribution
+        )
+
+    return totals
+
+
+def _build_category_summaries(
+    db: Session,
+    categories: list[models.AllowanceCategory],
+    month_label: str,
+    end: date,
+) -> tuple[list[schemas.CategorySummary], Decimal, Decimal, Decimal, Decimal, int]:
+    monthly_spend_map = _category_monthly_spend_up_to(db, end)
+
+    remaining_per_category: list[schemas.CategorySummary] = []
+    total_allowances = ZERO
+    total_spent = ZERO
+    remaining_budget_to_reserve_total = ZERO
+    over_budget_total = ZERO
+    categories_over_budget_count = 0
+    previous_month_label = _previous_month_label(month_label)
+
+    for category in categories:
+        monthly_budget = _normalize_money(Decimal(category.monthly_budget))
+        total_allowances += monthly_budget
+        category_spend_by_month = monthly_spend_map.get(category.id, {})
+        current_spent = _normalize_money(category_spend_by_month.get(month_label, ZERO))
+        total_spent += current_spent
+        carryover_before = ZERO
+        budget_available = monthly_budget
+
+        if category.budget_mode in {"rollover", "sinking_fund"}:
+            starting_balance = _normalize_money(Decimal(category.starting_balance or ZERO))
+            prior_month_labels = [label for label in category_spend_by_month if label < month_label]
+            first_label = min(prior_month_labels) if prior_month_labels else month_label
+            prior_month_count = (
+                _months_between_inclusive(first_label, previous_month_label)
+                if first_label <= previous_month_label
+                else 0
+            )
+            prior_spend_total = ZERO
+            for label, amount in category_spend_by_month.items():
+                if label < month_label:
+                    prior_spend_total += _normalize_money(amount)
+            carryover_before = _normalize_money(
+                starting_balance + (monthly_budget * prior_month_count) - prior_spend_total
+            )
+            budget_available = _normalize_money(carryover_before + monthly_budget)
+
+        remaining = _normalize_money(budget_available - current_spent)
+
+        if remaining > ZERO:
+            remaining_budget_to_reserve_total += remaining
+        elif remaining < ZERO:
+            over_budget_total += abs(remaining)
+            categories_over_budget_count += 1
+
+        remaining_per_category.append(
+            schemas.CategorySummary(
+                category_id=category.id,
+                category_name=category.name,
+                budget=budget_available,
+                monthly_budget=monthly_budget,
+                spent=current_spent,
+                remaining=remaining,
+                budget_mode=category.budget_mode,
+                carryover_balance=carryover_before,
+            )
+        )
+
+    return (
+        remaining_per_category,
+        _normalize_money(total_allowances),
+        _normalize_money(total_spent),
+        _normalize_money(remaining_budget_to_reserve_total),
+        _normalize_money(over_budget_total),
+        categories_over_budget_count,
+    )
 
 
 def list_incomes(db: Session):
@@ -171,7 +382,6 @@ def update_cash_position(db: Session, payload: schemas.CashPositionUpdate):
 
 def list_variable_income_entries(db: Session, month: str | None = None):
     query = select(models.VariableIncomeEntry)
-
     if month:
         start, end, _ = _month_bounds(month)
         query = query.where(
@@ -250,9 +460,7 @@ def update_bill(db: Session, bill_id: int, bill: schemas.BillUpdate):
     ).all()
     for payment in payment_rows:
         transaction = db.scalar(
-            select(models.Transaction).where(
-                models.Transaction.fixed_expense_payment_id == payment.id
-            )
+            select(models.Transaction).where(models.Transaction.fixed_expense_payment_id == payment.id)
         )
         if transaction:
             transaction.description = record.name
@@ -272,12 +480,12 @@ def delete_bill(db: Session, bill_id: int):
         select(models.FixedExpensePayment).where(models.FixedExpensePayment.bill_id == bill_id)
     ).all()
     for payment in payment_rows:
+        _delete_receipt(payment.receipt_path)
         linked_transaction = db.scalar(
-            select(models.Transaction).where(
-                models.Transaction.fixed_expense_payment_id == payment.id
-            )
+            select(models.Transaction).where(models.Transaction.fixed_expense_payment_id == payment.id)
         )
         if linked_transaction:
+            _delete_receipt(linked_transaction.receipt_path)
             db.delete(linked_transaction)
         db.delete(payment)
 
@@ -303,16 +511,16 @@ def set_bill_payment(db: Session, bill_id: int, payload: schemas.BillPaymentUpda
             bill_id=bill_id,
             month_label=label,
             paid_date=payload.paid_date,
+            note=_clean_optional_text(payload.note),
         )
         db.add(payment)
         db.flush()
     else:
         payment.paid_date = payload.paid_date
+        payment.note = _clean_optional_text(payload.note)
 
     linked_transaction = db.scalar(
-        select(models.Transaction).where(
-            models.Transaction.fixed_expense_payment_id == payment.id
-        )
+        select(models.Transaction).where(models.Transaction.fixed_expense_payment_id == payment.id)
     )
     if not linked_transaction:
         linked_transaction = models.Transaction(
@@ -348,16 +556,64 @@ def clear_bill_payment(db: Session, bill_id: int, month: str):
     if not payment:
         raise LookupError("No paid date is recorded for that fixed expense in this month.")
 
+    _delete_receipt(payment.receipt_path)
     linked_transaction = db.scalar(
-        select(models.Transaction).where(
-            models.Transaction.fixed_expense_payment_id == payment.id
-        )
+        select(models.Transaction).where(models.Transaction.fixed_expense_payment_id == payment.id)
     )
     if linked_transaction:
         db.delete(linked_transaction)
 
     db.delete(payment)
     db.commit()
+
+
+def get_bill_payment(db: Session, bill_id: int, month: str) -> models.FixedExpensePayment:
+    _, _, label = _month_bounds(month)
+    payment = db.scalar(
+        select(models.FixedExpensePayment).where(
+            models.FixedExpensePayment.bill_id == bill_id,
+            models.FixedExpensePayment.month_label == label,
+        )
+    )
+    if not payment:
+        raise LookupError("No paid record exists for that fixed expense in this month.")
+    return payment
+
+
+def upload_bill_payment_receipt(
+    db: Session,
+    bill_id: int,
+    month: str,
+    file_bytes: bytes,
+    original_name: str,
+    content_type: str | None,
+):
+    payment = get_bill_payment(db, bill_id, month)
+    _delete_receipt(payment.receipt_path)
+    payment.receipt_path = _save_receipt(file_bytes, original_name, f"bill_{bill_id}")
+    payment.receipt_name = original_name
+    payment.receipt_content_type = content_type
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+def clear_bill_payment_receipt(db: Session, bill_id: int, month: str):
+    payment = get_bill_payment(db, bill_id, month)
+    if not payment.receipt_path:
+        raise LookupError("No receipt is attached to that fixed expense payment.")
+    _delete_receipt(payment.receipt_path)
+    payment.receipt_path = None
+    payment.receipt_name = None
+    payment.receipt_content_type = None
+    db.commit()
+
+
+def get_bill_payment_receipt(db: Session, bill_id: int, month: str) -> tuple[str, str, str | None]:
+    payment = get_bill_payment(db, bill_id, month)
+    if not payment.receipt_path:
+        raise LookupError("No receipt is attached to that fixed expense payment.")
+    return payment.receipt_path, payment.receipt_name or "receipt", payment.receipt_content_type
 
 
 def list_categories(db: Session):
@@ -367,17 +623,20 @@ def list_categories(db: Session):
 
 
 def create_category(db: Session, category: schemas.AllowanceCategoryCreate):
+    normalized_name = category.name.strip()
     existing = db.scalar(
         select(models.AllowanceCategory).where(
-            func.lower(models.AllowanceCategory.name) == category.name.strip().lower()
+            func.lower(models.AllowanceCategory.name) == normalized_name.lower()
         )
     )
     if existing:
         raise ValueError("A category with that name already exists.")
 
     record = models.AllowanceCategory(
-        name=category.name.strip(),
+        name=normalized_name,
         monthly_budget=category.monthly_budget,
+        budget_mode=category.budget_mode,
+        starting_balance=category.starting_balance,
     )
     db.add(record)
     db.commit()
@@ -402,6 +661,8 @@ def update_category(db: Session, category_id: int, category: schemas.AllowanceCa
 
     record.name = normalized_name
     record.monthly_budget = category.monthly_budget
+    record.budget_mode = category.budget_mode
+    record.starting_balance = category.starting_balance
     db.commit()
     db.refresh(record)
     return record
@@ -424,14 +685,77 @@ def delete_category(db: Session, category_id: int):
     db.commit()
 
 
-def list_transactions(db: Session, month: str | None = None):
+def list_merchant_rules(db: Session):
+    return db.scalars(
+        select(models.MerchantRule).order_by(models.MerchantRule.group_name.asc(), models.MerchantRule.pattern.asc())
+    ).all()
+
+
+def create_merchant_rule(db: Session, payload: schemas.MerchantRuleCreate):
+    normalized_pattern = payload.pattern.strip()
+    existing = db.scalar(
+        select(models.MerchantRule).where(
+            func.lower(models.MerchantRule.pattern) == normalized_pattern.lower()
+        )
+    )
+    if existing:
+        raise ValueError("A merchant rule with that pattern already exists.")
+
+    record = models.MerchantRule(
+        pattern=normalized_pattern,
+        group_name=payload.group_name.strip(),
+        match_type=payload.match_type,
+        active=payload.active,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def update_merchant_rule(db: Session, rule_id: int, payload: schemas.MerchantRuleUpdate):
+    record = db.get(models.MerchantRule, rule_id)
+    if not record:
+        raise LookupError("Merchant rule not found.")
+
+    normalized_pattern = payload.pattern.strip()
+    existing = db.scalar(
+        select(models.MerchantRule).where(
+            func.lower(models.MerchantRule.pattern) == normalized_pattern.lower(),
+            models.MerchantRule.id != rule_id,
+        )
+    )
+    if existing:
+        raise ValueError("A merchant rule with that pattern already exists.")
+
+    record.pattern = normalized_pattern
+    record.group_name = payload.group_name.strip()
+    record.match_type = payload.match_type
+    record.active = payload.active
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def delete_merchant_rule(db: Session, rule_id: int):
+    record = db.get(models.MerchantRule, rule_id)
+    if not record:
+        raise LookupError("Merchant rule not found.")
+    db.delete(record)
+    db.commit()
+
+
+def _transaction_rows_for_month(db: Session, month: str | None):
     start, end, _ = _month_bounds(month)
-    rows = db.execute(
+    return db.execute(
         select(
             models.Transaction,
             models.AllowanceCategory.name,
             models.Bill.id,
             models.Bill.name,
+            models.FixedExpensePayment.note,
+            models.FixedExpensePayment.receipt_path,
+            models.FixedExpensePayment.receipt_name,
         )
         .outerjoin(models.AllowanceCategory, models.Transaction.category_id == models.AllowanceCategory.id)
         .outerjoin(
@@ -443,22 +767,78 @@ def list_transactions(db: Session, month: str | None = None):
         .order_by(models.Transaction.date.desc(), models.Transaction.id.desc())
     ).all()
 
-    return [
-        schemas.TransactionRead(
-            id=transaction.id,
-            description=transaction.description,
-            amount=transaction.amount,
-            date=transaction.date,
-            transaction_type=transaction.transaction_type,
-            category_id=transaction.category_id,
-            category_name=category_name,
-            source_type="fixed_expense" if fixed_expense_id else "allowance",
-            fixed_expense_id=fixed_expense_id,
-            fixed_expense_name=fixed_expense_name,
-            locked=transaction.fixed_expense_payment_id is not None,
+
+def list_transactions(
+    db: Session,
+    month: str | None = None,
+    q: str | None = None,
+    category_id: int | None = None,
+    transaction_type: str | None = None,
+    source_type: str | None = None,
+    merchant_group: str | None = None,
+    min_amount: Decimal | None = None,
+    max_amount: Decimal | None = None,
+):
+    merchant_rules = _list_active_merchant_rules(db)
+    rows = _transaction_rows_for_month(db, month)
+    serialized = [
+        _serialize_transaction_row(
+            transaction,
+            category_name,
+            fixed_expense_id,
+            fixed_expense_name,
+            payment_note,
+            payment_receipt_path,
+            payment_receipt_name,
+            merchant_rules,
         )
-        for transaction, category_name, fixed_expense_id, fixed_expense_name in rows
+        for (
+            transaction,
+            category_name,
+            fixed_expense_id,
+            fixed_expense_name,
+            payment_note,
+            payment_receipt_path,
+            payment_receipt_name,
+        ) in rows
     ]
+
+    search = (q or "").strip().lower()
+    min_amount_value = Decimal(min_amount) if min_amount is not None else None
+    max_amount_value = Decimal(max_amount) if max_amount is not None else None
+
+    filtered: list[schemas.TransactionRead] = []
+    for item in serialized:
+        if search:
+            haystack = " ".join(
+                part
+                for part in [
+                    item.description,
+                    item.category_name or "",
+                    item.fixed_expense_name or "",
+                    item.note or "",
+                    item.merchant_group or "",
+                ]
+                if part
+            ).lower()
+            if search not in haystack:
+                continue
+        if category_id is not None and item.category_id != category_id:
+            continue
+        if transaction_type and item.transaction_type != transaction_type:
+            continue
+        if source_type and item.source_type != source_type:
+            continue
+        if merchant_group and (item.merchant_group or "") != merchant_group:
+            continue
+        amount_value = Decimal(item.amount)
+        if min_amount_value is not None and amount_value < min_amount_value:
+            continue
+        if max_amount_value is not None and amount_value > max_amount_value:
+            continue
+        filtered.append(item)
+
+    return filtered
 
 
 def create_transaction(db: Session, transaction: schemas.TransactionCreate):
@@ -466,11 +846,14 @@ def create_transaction(db: Session, transaction: schemas.TransactionCreate):
     if not category:
         raise ValueError("Transaction category_id must reference an existing allowance category.")
 
-    record = models.Transaction(**transaction.model_dump())
+    payload = transaction.model_dump()
+    payload["note"] = _clean_optional_text(payload.get("note"))
+    record = models.Transaction(**payload)
     db.add(record)
     db.commit()
     db.refresh(record)
 
+    merchant_group = _resolve_merchant_group(record.description, _list_active_merchant_rules(db))
     return schemas.TransactionRead(
         id=record.id,
         description=record.description,
@@ -479,6 +862,10 @@ def create_transaction(db: Session, transaction: schemas.TransactionCreate):
         transaction_type=record.transaction_type,
         category_id=record.category_id,
         category_name=category.name,
+        merchant_group=merchant_group,
+        note=record.note,
+        has_receipt=bool(record.receipt_path),
+        receipt_name=record.receipt_name,
         source_type="allowance",
         fixed_expense_id=None,
         fixed_expense_name=None,
@@ -497,12 +884,15 @@ def update_transaction(db: Session, transaction_id: int, transaction: schemas.Tr
     if not category:
         raise ValueError("Transaction category_id must reference an existing allowance category.")
 
-    for field, value in transaction.model_dump().items():
+    payload = transaction.model_dump()
+    payload["note"] = _clean_optional_text(payload.get("note"))
+    for field, value in payload.items():
         setattr(record, field, value)
 
     db.commit()
     db.refresh(record)
 
+    merchant_group = _resolve_merchant_group(record.description, _list_active_merchant_rules(db))
     return schemas.TransactionRead(
         id=record.id,
         description=record.description,
@@ -511,6 +901,10 @@ def update_transaction(db: Session, transaction_id: int, transaction: schemas.Tr
         transaction_type=record.transaction_type,
         category_id=record.category_id,
         category_name=category.name,
+        merchant_group=merchant_group,
+        note=record.note,
+        has_receipt=bool(record.receipt_path),
+        receipt_name=record.receipt_name,
         source_type="allowance",
         fixed_expense_id=None,
         fixed_expense_name=None,
@@ -525,7 +919,199 @@ def delete_transaction(db: Session, transaction_id: int):
     if record.fixed_expense_payment_id is not None:
         raise ValueError("Fixed expense payments are removed from Fixed Expenses.")
 
+    _delete_receipt(record.receipt_path)
     db.delete(record)
+    db.commit()
+
+
+def upload_transaction_receipt(
+    db: Session,
+    transaction_id: int,
+    file_bytes: bytes,
+    original_name: str,
+    content_type: str | None,
+):
+    record = db.get(models.Transaction, transaction_id)
+    if not record:
+        raise LookupError("Transaction not found.")
+    if record.fixed_expense_payment_id is not None:
+        raise ValueError("Fixed expense payment receipts are managed from Fixed Expenses.")
+
+    _delete_receipt(record.receipt_path)
+    record.receipt_path = _save_receipt(file_bytes, original_name, f"transaction_{transaction_id}")
+    record.receipt_name = original_name
+    record.receipt_content_type = content_type
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def clear_transaction_receipt(db: Session, transaction_id: int):
+    record = db.get(models.Transaction, transaction_id)
+    if not record:
+        raise LookupError("Transaction not found.")
+    if record.fixed_expense_payment_id is not None:
+        raise ValueError("Fixed expense payment receipts are managed from Fixed Expenses.")
+    if not record.receipt_path:
+        raise LookupError("No receipt is attached to that transaction.")
+
+    _delete_receipt(record.receipt_path)
+    record.receipt_path = None
+    record.receipt_name = None
+    record.receipt_content_type = None
+    db.commit()
+
+
+def get_transaction_receipt(db: Session, transaction_id: int) -> tuple[str, str, str | None]:
+    record = db.get(models.Transaction, transaction_id)
+    if not record:
+        raise LookupError("Transaction not found.")
+    if record.fixed_expense_payment_id is not None:
+        payment = db.get(models.FixedExpensePayment, record.fixed_expense_payment_id)
+        if not payment or not payment.receipt_path:
+            raise LookupError("No receipt is attached to that fixed expense payment.")
+        return payment.receipt_path, payment.receipt_name or "receipt", payment.receipt_content_type
+    if not record.receipt_path:
+        raise LookupError("No receipt is attached to that transaction.")
+    return record.receipt_path, record.receipt_name or "receipt", record.receipt_content_type
+
+
+def _csv_text(rows: list[list[object]]) -> str:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerows(rows)
+    return buffer.getvalue()
+
+
+def export_transactions_csv(
+    db: Session,
+    month: str | None = None,
+    q: str | None = None,
+    category_id: int | None = None,
+    transaction_type: str | None = None,
+    source_type: str | None = None,
+    merchant_group: str | None = None,
+    min_amount: Decimal | None = None,
+    max_amount: Decimal | None = None,
+) -> str:
+    transactions = list_transactions(
+        db,
+        month=month,
+        q=q,
+        category_id=category_id,
+        transaction_type=transaction_type,
+        source_type=source_type,
+        merchant_group=merchant_group,
+        min_amount=min_amount,
+        max_amount=max_amount,
+    )
+    rows = [[
+        "Date",
+        "Description",
+        "Type",
+        "Amount",
+        "Category",
+        "Merchant Group",
+        "Source",
+        "Note",
+        "Receipt",
+    ]]
+    for item in transactions:
+        rows.append([
+            item.date,
+            item.description,
+            item.transaction_type,
+            item.amount,
+            item.category_name or item.fixed_expense_name or "",
+            item.merchant_group or "",
+            item.source_type,
+            item.note or "",
+            item.receipt_name or "",
+        ])
+    return _csv_text(rows)
+
+
+def export_fixed_expenses_csv(db: Session, month: str | None = None) -> str:
+    rows = [[
+        "Fixed Expense",
+        "Due Date",
+        "Paid Date",
+        "Status",
+        "Amount",
+        "Payment Note",
+        "Receipt",
+    ]]
+    for bill in list_bills(db, month):
+        rows.append([
+            bill.name,
+            bill.due_date_for_month or "",
+            bill.paid_date or "",
+            "Paid" if bill.is_paid_for_month else "Unpaid",
+            bill.amount,
+            bill.payment_note or "",
+            bill.payment_receipt_name or "",
+        ])
+    return _csv_text(rows)
+
+
+def export_category_summary_csv(db: Session, month: str | None = None) -> str:
+    dashboard = calculate_dashboard(db, month)
+    rows = [[
+        "Category",
+        "Mode",
+        "Monthly Budget",
+        "Available This Month",
+        "Carryover In",
+        "Spent",
+        "Remaining",
+    ]]
+    for item in dashboard["remaining_per_category"]:
+        rows.append([
+            item.category_name,
+            item.budget_mode,
+            item.monthly_budget,
+            item.budget,
+            item.carryover_balance,
+            item.spent,
+            item.remaining,
+        ])
+    return _csv_text(rows)
+
+
+def list_users(db: Session):
+    return db.scalars(select(models.User).order_by(models.User.username.asc())).all()
+
+
+def create_user(db: Session, payload: schemas.UserCreate):
+    username = payload.username.strip()
+    existing = auth.get_user_by_username(db, username)
+    if existing:
+        raise ValueError("That username is already in use.")
+
+    user = models.User(
+        username=username,
+        password_hash=auth.hash_password(payload.password),
+        is_active=True,
+        session_version=0,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def delete_user(db: Session, user_id: int, current_user_id: int):
+    user = db.get(models.User, user_id)
+    if not user:
+        raise LookupError("User not found.")
+
+    total_users = db.scalar(select(func.count(models.User.id))) or 0
+    if total_users <= 1:
+        raise ValueError("You cannot remove the last household user.")
+    if user.id == current_user_id:
+        raise ValueError("Use another login to remove this user.")
+
+    db.delete(user)
     db.commit()
 
 
@@ -564,70 +1150,19 @@ def calculate_dashboard(db: Session, month: str | None = None):
         else:
             regular_bills_total += amount
 
-    spent_rows = db.execute(
-        select(
-            models.Transaction.category_id,
-            func.coalesce(
-                func.sum(
-                    case(
-                        (models.Transaction.transaction_type == "income", -models.Transaction.amount),
-                        else_=models.Transaction.amount,
-                    )
-                ),
-                0,
-            ),
-        )
-        .where(
-            models.Transaction.date >= start,
-            models.Transaction.date <= end,
-            models.Transaction.category_id.is_not(None),
-        )
-        .group_by(models.Transaction.category_id)
-    ).all()
-    spent_by_category = {
-        category_id: _normalize_money(Decimal(total))
-        for category_id, total in spent_rows
-    }
-
-    remaining_per_category: list[schemas.CategorySummary] = []
-    total_allowances = ZERO
-    total_spent = ZERO
-    remaining_budget_to_reserve_total = ZERO
-    over_budget_total = ZERO
-    categories_over_budget_count = 0
-
-    for category in categories:
-        budget = _normalize_money(Decimal(category.monthly_budget))
-        spent = spent_by_category.get(category.id, ZERO)
-        remaining = _normalize_money(budget - spent)
-
-        total_allowances += budget
-        total_spent += spent
-
-        if remaining > ZERO:
-            remaining_budget_to_reserve_total += remaining
-        elif remaining < ZERO:
-            over_budget_total += abs(remaining)
-            categories_over_budget_count += 1
-
-        remaining_per_category.append(
-            schemas.CategorySummary(
-                category_id=category.id,
-                category_name=category.name,
-                budget=budget,
-                spent=spent,
-                remaining=remaining,
-            )
-        )
+    (
+        remaining_per_category,
+        total_allowances,
+        total_spent,
+        remaining_budget_to_reserve_total,
+        over_budget_total,
+        categories_over_budget_count,
+    ) = _build_category_summaries(db, categories, label, end)
 
     total_bills = _normalize_money(regular_bills_total + chapter13_payment_total)
     recurring_monthly_income = _normalize_money(recurring_monthly_income)
     variable_income_total = _normalize_money(variable_income_total)
     monthly_income = _normalize_money(monthly_income)
-    total_allowances = _normalize_money(total_allowances)
-    total_spent = _normalize_money(total_spent)
-    remaining_budget_to_reserve_total = _normalize_money(remaining_budget_to_reserve_total)
-    over_budget_total = _normalize_money(over_budget_total)
     regular_bills_total = _normalize_money(regular_bills_total)
     chapter13_payment_total = _normalize_money(chapter13_payment_total)
     safe_to_spend = _normalize_money(monthly_income - total_bills - total_allowances)
@@ -657,9 +1192,9 @@ def calculate_dashboard(db: Session, month: str | None = None):
         "over_budget_total": over_budget_total,
         "categories_over_budget_count": categories_over_budget_count,
         "safe_to_spend_after_budgeted_categories": safe_to_spend,
-        "projected_available_to_spend_right_now": projected_available_to_spend_right_now,
         "buffer_after_bills": buffer_after_bills,
         "buffer_after_actual_spending": buffer_after_actual_spending,
+        "projected_available_to_spend_right_now": projected_available_to_spend_right_now,
         "available_to_spend_right_now": available_to_spend_right_now,
         "remaining_per_category": remaining_per_category,
     }

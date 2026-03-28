@@ -10,6 +10,7 @@ const initialForm = {
   date: todayValue(),
   transaction_type: "expense",
   category_id: "",
+  note: "",
 };
 
 export default function TransactionForm({ categories, onCreate }) {
@@ -128,6 +129,16 @@ export default function TransactionForm({ categories, onCreate }) {
             />
           </div>
 
+          <div className="field field-span-full">
+            <label htmlFor="transaction-note">Note</label>
+            <input
+              id="transaction-note"
+              value={form.note}
+              onChange={(event) => setForm({ ...form, note: event.target.value })}
+              placeholder="Optional note, reimbursement details, what was purchased, etc."
+            />
+          </div>
+
           <div className="sheet-entry-actions">
             <button
               className="button"
@@ -151,6 +162,10 @@ export default function TransactionForm({ categories, onCreate }) {
 
         <p className="helper-text">
           Use <strong>Money In / Refund</strong> for Amazon refunds, Venmo paybacks, reimbursements, or other money coming back in.
+        </p>
+
+        <p className="helper-text">
+          Add the row first, then use the register below to attach a receipt file if you want one saved with it.
         </p>
 
         {error ? <div className="form-error">{error}</div> : null}

@@ -8,6 +8,7 @@ import CategoryList from "./components/CategoryList";
 import TransactionForm from "./components/TransactionForm";
 import TransactionList from "./components/TransactionList";
 import Visualize from "./components/Visualize";
+import UserManagement from "./components/UserManagement";
 
 function currentMonthValue() {
   const now = new Date();
@@ -23,6 +24,7 @@ const navItems = [
   { id: "income", label: "Income" },
   { id: "categories", label: "Categories" },
   { id: "visualize", label: "Visualize" },
+  { id: "household", label: "Household" },
 ];
 
 export default function App() {
@@ -40,6 +42,8 @@ export default function App() {
   const [bills, setBills] = useState([]);
   const [categories, setCategories] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [merchantRules, setMerchantRules] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -93,6 +97,8 @@ export default function App() {
         billsData,
         categoriesData,
         transactionsData,
+        merchantRuleData,
+        usersData,
       ] = await Promise.all([
         api.getDashboard(month),
         api.getPlan(month),
@@ -101,7 +107,9 @@ export default function App() {
         api.getIncomeAdjustments(month),
         api.getBills(month),
         api.getCategories(),
-        api.getTransactions(month),
+        api.getTransactions({ month }),
+        api.getMerchantRules(),
+        api.getUsers(),
       ]);
 
       setDashboard(dashboardData);
@@ -112,19 +120,13 @@ export default function App() {
       setBills(billsData);
       setCategories(categoriesData);
       setTransactions(transactionsData);
+      setMerchantRules(merchantRuleData);
+      setUsers(usersData);
     } catch (requestError) {
       if (requestError.status === 401) {
         api.clearAuthToken();
         setCurrentUser(null);
         setSetupRequired(false);
-        setDashboard(null);
-        setPlan(null);
-        setCashPosition(null);
-        setIncomes([]);
-        setIncomeAdjustments([]);
-        setBills([]);
-        setCategories([]);
-        setTransactions([]);
       }
       setError(requestError.message || "Unable to load MadiBudget data.");
     } finally {
@@ -147,6 +149,8 @@ export default function App() {
       setBills([]);
       setCategories([]);
       setTransactions([]);
+      setMerchantRules([]);
+      setUsers([]);
       setLoading(false);
       setError("Your session expired. Please sign in again.");
     }
@@ -204,6 +208,8 @@ export default function App() {
     setBills([]);
     setCategories([]);
     setTransactions([]);
+    setMerchantRules([]);
+    setUsers([]);
     setLoading(false);
     setError("");
   }
@@ -263,6 +269,16 @@ export default function App() {
     await loadData();
   }
 
+  async function handleUploadBillReceipt(id, file) {
+    await api.uploadBillPaymentReceipt(id, month, file);
+    await loadData();
+  }
+
+  async function handleDeleteBillReceipt(id) {
+    await api.deleteBillPaymentReceipt(id, month);
+    await loadData();
+  }
+
   async function handleCreateCategory(payload) {
     await api.createCategory(payload);
     await loadData();
@@ -293,9 +309,53 @@ export default function App() {
     await loadData();
   }
 
+  async function handleUploadTransactionReceipt(id, file) {
+    await api.uploadTransactionReceipt(id, file);
+    await loadData();
+  }
+
+  async function handleDeleteTransactionReceipt(id) {
+    await api.deleteTransactionReceipt(id);
+    await loadData();
+  }
+
   async function handleUpdateCashPosition(payload) {
     await api.updateCashPosition(payload);
     await loadData();
+  }
+
+  async function handleCreateMerchantRule(payload) {
+    await api.createMerchantRule(payload);
+    await loadData();
+  }
+
+  async function handleUpdateMerchantRule(id, payload) {
+    await api.updateMerchantRule(id, payload);
+    await loadData();
+  }
+
+  async function handleDeleteMerchantRule(id) {
+    await api.deleteMerchantRule(id);
+    await loadData();
+  }
+
+  async function handleCreateUser(payload) {
+    await api.createUser(payload);
+    await loadData();
+  }
+
+  async function handleDeleteUser(id) {
+    await api.deleteUser(id);
+    await loadData();
+  }
+
+  async function handleChangePassword(payload) {
+    await api.changePassword(payload);
+    handleLogout();
+  }
+
+  async function handleLogoutAllSessions() {
+    await api.logoutAllSessions();
   }
 
   const activeNav = navItems.find((item) => item.id === activeView);
@@ -341,7 +401,7 @@ export default function App() {
         </nav>
 
         <div className="sidebar-footnote">
-          Track cash flow, protect fixed expenses, and stay inside category limits.
+          Track cash flow, protect fixed expenses, group merchants, and stay inside category limits.
         </div>
       </aside>
 
@@ -362,11 +422,7 @@ export default function App() {
                   <label className="control-label">Signed In</label>
                   <div className="topbar-user-chip">{currentUser.username}</div>
                 </div>
-                <button
-                  type="button"
-                  className="table-action-button"
-                  onClick={handleLogout}
-                >
+                <button type="button" className="table-action-button" onClick={handleLogout}>
                   Sign Out
                 </button>
               </div>
@@ -403,16 +459,16 @@ export default function App() {
 
           {activeView === "transactions" ? (
             <div className="ledger-stack">
-              <TransactionForm
-                categories={categories}
-                onCreate={handleCreateTransaction}
-              />
+              <TransactionForm categories={categories} onCreate={handleCreateTransaction} />
               <TransactionList
                 transactions={transactions}
                 categories={categories}
+                merchantRules={merchantRules}
                 month={month}
                 onUpdate={handleUpdateTransaction}
                 onDelete={handleDeleteTransaction}
+                onUploadReceipt={handleUploadTransactionReceipt}
+                onDeleteReceipt={handleDeleteTransactionReceipt}
               />
             </div>
           ) : null}
@@ -426,6 +482,8 @@ export default function App() {
               onDelete={handleDeleteBill}
               onSetPayment={handleSetBillPayment}
               onClearPayment={handleClearBillPayment}
+              onUploadReceipt={handleUploadBillReceipt}
+              onDeleteReceipt={handleDeleteBillReceipt}
             />
           ) : null}
 
@@ -447,6 +505,7 @@ export default function App() {
           {activeView === "categories" ? (
             <CategoryList
               categories={categories}
+              month={month}
               onCreate={handleCreateCategory}
               onUpdate={handleUpdateCategory}
               onDelete={handleDeleteCategory}
@@ -457,7 +516,23 @@ export default function App() {
             <Visualize
               transactions={transactions}
               categories={categories}
+              merchantRules={merchantRules}
               month={month}
+              onCreateRule={handleCreateMerchantRule}
+              onUpdateRule={handleUpdateMerchantRule}
+              onDeleteRule={handleDeleteMerchantRule}
+            />
+          ) : null}
+
+          {activeView === "household" ? (
+            <UserManagement
+              users={users}
+              currentUser={currentUser}
+              onCreateUser={handleCreateUser}
+              onDeleteUser={handleDeleteUser}
+              onChangePassword={handleChangePassword}
+              onLogoutAllSessions={handleLogoutAllSessions}
+              onAfterLogoutAll={handleLogout}
             />
           ) : null}
         </section>

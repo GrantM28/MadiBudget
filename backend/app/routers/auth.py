@@ -57,7 +57,7 @@ def setup_first_user(payload: schemas.UserSetupCreate, db: Session = Depends(get
         ) from error
 
     return {
-        "access_token": auth.create_access_token(user.username),
+        "access_token": auth.create_access_token(user.username, int(user.session_version or 0)),
         "token_type": "bearer",
         "user": user,
     }
@@ -73,7 +73,7 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
         )
 
     return {
-        "access_token": auth.create_access_token(user.username),
+        "access_token": auth.create_access_token(user.username, int(user.session_version or 0)),
         "token_type": "bearer",
         "user": user,
     }
@@ -82,3 +82,31 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=schemas.UserRead)
 def me(current_user: models.User = Depends(auth.require_current_user)):
     return current_user
+
+
+@router.post("/change-password", status_code=204)
+def change_password(
+    payload: schemas.ChangePasswordRequest,
+    current_user: models.User = Depends(auth.require_current_user),
+    db: Session = Depends(get_db),
+):
+    if not auth.verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )
+
+    current_user.password_hash = auth.hash_password(payload.new_password)
+    current_user.session_version = int(current_user.session_version or 0) + 1
+    db.commit()
+    return None
+
+
+@router.post("/logout-all", status_code=204)
+def logout_all_sessions(
+    current_user: models.User = Depends(auth.require_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.session_version = int(current_user.session_version or 0) + 1
+    db.commit()
+    return None

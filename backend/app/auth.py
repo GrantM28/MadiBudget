@@ -88,10 +88,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return False
 
 
-def create_access_token(username: str) -> str:
+def create_access_token(username: str, session_version: int) -> str:
     expires_at = datetime.now(timezone.utc) + timedelta(hours=AUTH_TOKEN_EXPIRE_HOURS)
     payload = {
         "sub": username,
+        "sv": session_version,
         "exp": expires_at,
     }
     return jwt.encode(payload, AUTH_SECRET_KEY, algorithm=AUTH_ALGORITHM)
@@ -129,6 +130,7 @@ def require_current_user(
             algorithms=[AUTH_ALGORITHM],
         )
         username = payload.get("sub")
+        session_version = payload.get("sv", 0)
     except JWTError as error:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -146,6 +148,11 @@ def require_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User account is not available.",
+        )
+    if int(user.session_version or 0) != int(session_version):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This session is no longer valid. Please sign in again.",
         )
 
     return user
