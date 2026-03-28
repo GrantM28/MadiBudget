@@ -21,10 +21,35 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(80), nullable=False, unique=True, index=True)
+    display_name = Column(String(120), nullable=False, default="", server_default="")
+    email = Column(String(255), nullable=True, unique=True)
+    role = Column(String(30), nullable=False, default="member", server_default="member")
     password_hash = Column(String(255), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True, server_default="true")
     session_version = Column(Integer, nullable=False, default=0, server_default="0")
+    avatar_path = Column(String(500), nullable=True)
+    avatar_name = Column(String(255), nullable=True)
+    avatar_content_type = Column(String(120), nullable=True)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    sessions = relationship("AuthSession", back_populates="user", cascade="all, delete-orphan")
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_id = Column(String(64), nullable=False, unique=True, index=True)
+    user_agent = Column(String(500), nullable=True)
+    ip_address = Column(String(120), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_seen_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User", back_populates="sessions")
 
 
 class VariableIncomeEntry(Base):

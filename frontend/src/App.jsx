@@ -44,8 +44,25 @@ export default function App() {
   const [transactions, setTransactions] = useState([]);
   const [merchantRules, setMerchantRules] = useState([]);
   const [users, setUsers] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  function clearWorkspace() {
+    setDashboard(null);
+    setPlan(null);
+    setCashPosition(null);
+    setIncomes([]);
+    setIncomeAdjustments([]);
+    setBills([]);
+    setCategories([]);
+    setTransactions([]);
+    setMerchantRules([]);
+    setUsers([]);
+    setSessions([]);
+    setAvatarUrl("");
+  }
 
   async function initializeAuth() {
     setAuthLoading(true);
@@ -57,12 +74,14 @@ export default function App() {
 
       if (status.setup_required) {
         setCurrentUser(null);
+        clearWorkspace();
         setLoading(false);
         return;
       }
 
       if (!api.hasAuthToken()) {
         setCurrentUser(null);
+        clearWorkspace();
         setLoading(false);
         return;
       }
@@ -72,6 +91,7 @@ export default function App() {
     } catch (requestError) {
       api.clearAuthToken();
       setCurrentUser(null);
+      clearWorkspace();
       setError(requestError.message || "Unable to verify login.");
     } finally {
       setAuthLoading(false);
@@ -98,6 +118,7 @@ export default function App() {
         categoriesData,
         transactionsData,
         merchantRuleData,
+        sessionData,
         usersData,
       ] = await Promise.all([
         api.getDashboard(month),
@@ -109,7 +130,8 @@ export default function App() {
         api.getCategories(),
         api.getTransactions({ month }),
         api.getMerchantRules(),
-        api.getUsers(),
+        api.getSessions(),
+        currentUser.role === "owner" ? api.getUsers() : Promise.resolve([]),
       ]);
 
       setDashboard(dashboardData);
@@ -121,12 +143,14 @@ export default function App() {
       setCategories(categoriesData);
       setTransactions(transactionsData);
       setMerchantRules(merchantRuleData);
+      setSessions(sessionData);
       setUsers(usersData);
     } catch (requestError) {
       if (requestError.status === 401) {
         api.clearAuthToken();
         setCurrentUser(null);
         setSetupRequired(false);
+        clearWorkspace();
       }
       setError(requestError.message || "Unable to load MadiBudget data.");
     } finally {
@@ -141,16 +165,7 @@ export default function App() {
   useEffect(() => {
     function handleAuthExpired() {
       setCurrentUser(null);
-      setDashboard(null);
-      setPlan(null);
-      setCashPosition(null);
-      setIncomes([]);
-      setIncomeAdjustments([]);
-      setBills([]);
-      setCategories([]);
-      setTransactions([]);
-      setMerchantRules([]);
-      setUsers([]);
+      clearWorkspace();
       setLoading(false);
       setError("Your session expired. Please sign in again.");
     }
@@ -164,6 +179,57 @@ export default function App() {
       loadData();
     }
   }, [authLoading, currentUser, month]);
+
+  useEffect(() => {
+    let active = true;
+    let nextUrl = "";
+
+    async function loadAvatar() {
+      if (!currentUser?.has_avatar) {
+        setAvatarUrl((current) => {
+          if (current) {
+            window.URL.revokeObjectURL(current);
+          }
+          return "";
+        });
+        return;
+      }
+
+      try {
+        const blobUrl = await api.getAvatarBlobUrl(currentUser.id);
+        if (!active) {
+          window.URL.revokeObjectURL(blobUrl);
+          return;
+        }
+
+        setAvatarUrl((current) => {
+          if (current) {
+            window.URL.revokeObjectURL(current);
+          }
+          nextUrl = blobUrl;
+          return blobUrl;
+        });
+      } catch {
+        if (active) {
+          setAvatarUrl((current) => {
+            if (current) {
+              window.URL.revokeObjectURL(current);
+            }
+            return "";
+          });
+        }
+      }
+    }
+
+    loadAvatar();
+
+    return () => {
+      active = false;
+      if (nextUrl) {
+        window.URL.revokeObjectURL(nextUrl);
+      }
+    };
+  }, [currentUser?.id, currentUser?.has_avatar]);
 
   async function handleSetup(credentials) {
     setAuthSubmitting(true);
@@ -200,16 +266,7 @@ export default function App() {
   function handleLogout() {
     api.clearAuthToken();
     setCurrentUser(null);
-    setDashboard(null);
-    setPlan(null);
-    setCashPosition(null);
-    setIncomes([]);
-    setIncomeAdjustments([]);
-    setBills([]);
-    setCategories([]);
-    setTransactions([]);
-    setMerchantRules([]);
-    setUsers([]);
+    clearWorkspace();
     setLoading(false);
     setError("");
   }
@@ -344,6 +401,34 @@ export default function App() {
     await loadData();
   }
 
+  async function handleUpdateProfile(payload) {
+    const updated = await api.updateMe(payload);
+    setCurrentUser(updated);
+    await loadData();
+  }
+
+  async function handleUploadAvatar(file) {
+    const updated = await api.uploadMyAvatar(file);
+    setCurrentUser(updated);
+    await loadData();
+  }
+
+  async function handleDeleteAvatar() {
+    const updated = await api.deleteMyAvatar();
+    setCurrentUser(updated);
+    await loadData();
+  }
+
+  async function handleUpdateUser(id, payload) {
+    await api.updateUser(id, payload);
+    await loadData();
+  }
+
+  async function handleResetUserPassword(id, payload) {
+    await api.resetUserPassword(id, payload);
+    await loadData();
+  }
+
   async function handleDeleteUser(id) {
     await api.deleteUser(id);
     await loadData();
@@ -351,6 +436,11 @@ export default function App() {
 
   async function handleChangePassword(payload) {
     await api.changePassword(payload);
+    handleLogout();
+  }
+
+  async function handleLogoutCurrentSession() {
+    await api.logoutCurrentSession();
     handleLogout();
   }
 
@@ -420,7 +510,21 @@ export default function App() {
               <div className="topbar-user-row">
                 <div>
                   <label className="control-label">Signed In</label>
-                  <div className="topbar-user-chip">{currentUser.username}</div>
+                  <div className="topbar-user-chip topbar-user-chip-rich">
+                    {avatarUrl ? (
+                      <img
+                        className="user-badge-avatar"
+                        src={avatarUrl}
+                        alt={`${currentUser.display_name} avatar`}
+                      />
+                    ) : (
+                      <span className="user-badge-initials">{currentUser.initials || "MB"}</span>
+                    )}
+                    <span className="user-badge-text">
+                      <strong>{currentUser.display_name}</strong>
+                      <small>@{currentUser.username}</small>
+                    </span>
+                  </div>
                 </div>
                 <button type="button" className="table-action-button" onClick={handleLogout}>
                   Sign Out
@@ -528,9 +632,17 @@ export default function App() {
             <UserManagement
               users={users}
               currentUser={currentUser}
+              currentUserAvatarUrl={avatarUrl}
+              sessions={sessions}
               onCreateUser={handleCreateUser}
+              onUpdateProfile={handleUpdateProfile}
+              onUploadAvatar={handleUploadAvatar}
+              onDeleteAvatar={handleDeleteAvatar}
+              onUpdateUser={handleUpdateUser}
+              onResetUserPassword={handleResetUserPassword}
               onDeleteUser={handleDeleteUser}
               onChangePassword={handleChangePassword}
+              onLogoutCurrentSession={handleLogoutCurrentSession}
               onLogoutAllSessions={handleLogoutAllSessions}
               onAfterLogoutAll={handleLogout}
             />

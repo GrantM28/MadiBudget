@@ -2,7 +2,9 @@ import { useState } from "react";
 
 function initialSetupForm() {
   return {
+    display_name: "",
     username: "",
+    email: "",
     password: "",
     confirmPassword: "",
   };
@@ -45,7 +47,9 @@ export default function AuthScreen({
     }
 
     await onSetup({
+      display_name: setupForm.display_name.trim(),
       username: setupForm.username.trim(),
+      email: setupForm.email.trim() || null,
       password: setupForm.password,
     });
   }
@@ -114,6 +118,22 @@ export default function AuthScreen({
         {setupRequired ? (
           <form className="auth-form" onSubmit={handleSetupSubmit}>
             <div className="field">
+              <label htmlFor="setup-display-name">Display Name</label>
+              <input
+                id="setup-display-name"
+                value={setupForm.display_name}
+                onChange={(event) =>
+                  setSetupForm((current) => ({
+                    ...current,
+                    display_name: event.target.value,
+                  }))
+                }
+                maxLength={120}
+                required
+              />
+            </div>
+
+            <div className="field">
               <label htmlFor="setup-username">Username</label>
               <input
                 id="setup-username"
@@ -128,6 +148,22 @@ export default function AuthScreen({
                 minLength={3}
                 maxLength={80}
                 required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="setup-email">Email</label>
+              <input
+                id="setup-email"
+                type="email"
+                value={setupForm.email}
+                onChange={(event) =>
+                  setSetupForm((current) => ({
+                    ...current,
+                    email: event.target.value,
+                  }))
+                }
+                maxLength={255}
               />
             </div>
 

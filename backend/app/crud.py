@@ -1079,7 +1079,8 @@ def export_category_summary_csv(db: Session, month: str | None = None) -> str:
 
 
 def list_users(db: Session):
-    return db.scalars(select(models.User).order_by(models.User.username.asc())).all()
+    users = db.scalars(select(models.User).order_by(models.User.username.asc())).all()
+    return [auth.serialize_user(user) for user in users]
 
 
 def create_user(db: Session, payload: schemas.UserCreate):
@@ -1087,9 +1088,15 @@ def create_user(db: Session, payload: schemas.UserCreate):
     existing = auth.get_user_by_username(db, username)
     if existing:
         raise ValueError("That username is already in use.")
+    email = _clean_optional_text(payload.email)
+    if email and auth.get_user_by_email(db, email):
+        raise ValueError("That email is already in use.")
 
     user = models.User(
+        display_name=payload.display_name.strip(),
         username=username,
+        email=email,
+        role=payload.role,
         password_hash=auth.hash_password(payload.password),
         is_active=True,
         session_version=0,
@@ -1097,7 +1104,7 @@ def create_user(db: Session, payload: schemas.UserCreate):
     db.add(user)
     db.commit()
     db.refresh(user)
-    return user
+    return auth.serialize_user(user)
 
 
 def delete_user(db: Session, user_id: int, current_user_id: int):
@@ -1113,6 +1120,129 @@ def delete_user(db: Session, user_id: int, current_user_id: int):
 
     db.delete(user)
     db.commit()
+
+
+def update_user_self(db: Session, user_id: int, payload: schemas.UserUpdateSelf):
+    user = db.get(models.User, user_id)
+    if not user:
+        raise LookupError("User not found.")
+
+    normalized_username = payload.username.strip()
+    existing_user = auth.get_user_by_username(db, normalized_username)
+    if existing_user and existing_user.id != user_id:
+        raise ValueError("That username is already in use.")
+
+    email = _clean_optional_text(payload.email)
+    if email:
+        existing_email = auth.get_user_by_email(db, email)
+        if existing_email and existing_email.id != user_id:
+            raise ValueError("That email is already in use.")
+
+    user.display_name = payload.display_name.strip()
+    user.username = normalized_username
+    user.email = email
+    db.commit()
+    db.refresh(user)
+    return auth.serialize_user(user)
+
+
+def update_user_admin(db: Session, user_id: int, payload: schemas.UserAdminUpdate, current_user_id: int):
+    user = db.get(models.User, user_id)
+    if not user:
+        raise LookupError("User not found.")
+
+    normalized_username = payload.username.strip()
+    existing_user = auth.get_user_by_username(db, normalized_username)
+    if existing_user and existing_user.id != user_id:
+        raise ValueError("That username is already in use.")
+
+    email = _clean_optional_text(payload.email)
+    if email:
+        existing_email = auth.get_user_by_email(db, email)
+        if existing_email and existing_email.id != user_id:
+            raise ValueError("That email is already in use.")
+
+    if user.role == "owner" and (payload.role != "owner" or not payload.is_active):
+        owner_count = db.scalar(
+            select(func.count(models.User.id)).where(
+                models.User.role == "owner",
+                models.User.is_active.is_(True),
+                models.User.id != user_id,
+            )
+        )
+        if (owner_count or 0) < 1:
+            raise ValueError("At least one active owner must remain.")
+
+    if user.id == current_user_id and payload.role != "owner":
+        raise ValueError("You cannot remove owner access from your own account.")
+    if user.id == current_user_id and not payload.is_active:
+        raise ValueError("You cannot disable your own account.")
+
+    user.display_name = payload.display_name.strip()
+    user.username = normalized_username
+    user.email = email
+    user.role = payload.role
+    user.is_active = payload.is_active
+    db.commit()
+    db.refresh(user)
+    return auth.serialize_user(user)
+
+
+def admin_reset_user_password(db: Session, user_id: int, new_password: str):
+    user = db.get(models.User, user_id)
+    if not user:
+        raise LookupError("User not found.")
+
+    user.password_hash = auth.hash_password(new_password)
+    user.session_version = int(user.session_version or 0) + 1
+    auth.revoke_all_user_sessions(db, user)
+    db.refresh(user)
+    return auth.serialize_user(user)
+
+
+def upload_user_avatar(
+    db: Session,
+    user_id: int,
+    file_bytes: bytes,
+    original_name: str,
+    content_type: str | None,
+):
+    user = db.get(models.User, user_id)
+    if not user:
+        raise LookupError("User not found.")
+
+    _delete_receipt(user.avatar_path)
+    user.avatar_path = _save_receipt(file_bytes, original_name, f"avatar_{user_id}")
+    user.avatar_name = original_name
+    user.avatar_content_type = content_type
+    db.commit()
+    db.refresh(user)
+    return auth.serialize_user(user)
+
+
+def delete_user_avatar(db: Session, user_id: int):
+    user = db.get(models.User, user_id)
+    if not user:
+        raise LookupError("User not found.")
+    if not user.avatar_path:
+        raise LookupError("No avatar is attached to that user.")
+
+    _delete_receipt(user.avatar_path)
+    user.avatar_path = None
+    user.avatar_name = None
+    user.avatar_content_type = None
+    db.commit()
+    db.refresh(user)
+    return auth.serialize_user(user)
+
+
+def get_user_avatar(db: Session, user_id: int) -> tuple[str, str, str | None]:
+    user = db.get(models.User, user_id)
+    if not user:
+        raise LookupError("User not found.")
+    if not user.avatar_path:
+        raise LookupError("No avatar is attached to that user.")
+    return user.avatar_path, user.avatar_name or "avatar", user.avatar_content_type
 
 
 def calculate_dashboard(db: Session, month: str | None = None):

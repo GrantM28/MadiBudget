@@ -114,9 +114,9 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-async function uploadFile(path, file) {
+async function uploadFile(path, file, fieldName = "receipt") {
   const formData = new FormData();
-  formData.append("receipt", file);
+  formData.append(fieldName, file);
   return request(path, {
     method: "POST",
     body: formData,
@@ -147,6 +147,23 @@ async function downloadFile(path, filename) {
   window.URL.revokeObjectURL(url);
 }
 
+async function fetchBlobUrl(path) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: {
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    const error = new Error("Unable to load file.");
+    error.status = response.status;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  return window.URL.createObjectURL(blob);
+}
+
 export const api = {
   hasAuthToken,
   setAuthToken,
@@ -163,6 +180,16 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   getMe: () => request("/auth/me"),
+  updateMe: (payload) =>
+    request("/auth/me", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  getSessions: () => request("/auth/sessions"),
+  logoutCurrentSession: () =>
+    request("/auth/logout-current", {
+      method: "POST",
+    }),
   changePassword: (payload) =>
     request("/auth/change-password", {
       method: "POST",
@@ -178,10 +205,26 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  updateUser: (id, payload) =>
+    request(`/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  resetUserPassword: (id, payload) =>
+    request(`/users/${id}/reset-password`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   deleteUser: (id) =>
     request(`/users/${id}`, {
       method: "DELETE",
     }),
+  uploadMyAvatar: (file) => uploadFile("/users/me/avatar", file, "avatar"),
+  deleteMyAvatar: () =>
+    request("/users/me/avatar", {
+      method: "DELETE",
+    }),
+  getAvatarBlobUrl: (userId) => fetchBlobUrl(`/users/${userId}/avatar`),
   getDashboard: (month) => request(`/dashboard?month=${encodeURIComponent(month)}`),
   getPlan: (month) => request(`/plan?month=${encodeURIComponent(month)}`),
   getCashPosition: () => request("/cash-position"),

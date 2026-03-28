@@ -11,6 +11,7 @@ TransactionDirection = Literal["expense", "income"]
 TransactionSource = Literal["allowance", "fixed_expense"]
 BudgetMode = Literal["monthly_reset", "rollover", "sinking_fund"]
 MerchantMatchType = Literal["contains", "exact", "starts_with"]
+UserRole = Literal["owner", "member"]
 
 
 class IncomeSourceBase(BaseModel):
@@ -57,8 +58,15 @@ class VariableIncomeRead(VariableIncomeBase):
 
 class UserRead(BaseModel):
     id: int
+    display_name: str
     username: str
+    email: str | None = None
+    role: UserRole = "member"
     is_active: bool
+    has_avatar: bool = False
+    avatar_name: str | None = None
+    initials: str | None = None
+    last_login_at: datetime | None = None
     created_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -70,15 +78,36 @@ class LoginRequest(BaseModel):
 
 
 class UserSetupCreate(LoginRequest):
-    pass
+    display_name: str = Field(..., min_length=1, max_length=120)
+    email: str | None = Field(default=None, max_length=255)
 
 
 class UserCreate(LoginRequest):
-    pass
+    display_name: str = Field(..., min_length=1, max_length=120)
+    email: str | None = Field(default=None, max_length=255)
+    role: UserRole = "member"
+
+
+class UserUpdateSelf(BaseModel):
+    display_name: str = Field(..., min_length=1, max_length=120)
+    username: str = Field(..., min_length=3, max_length=80)
+    email: str | None = Field(default=None, max_length=255)
+
+
+class UserAdminUpdate(BaseModel):
+    display_name: str = Field(..., min_length=1, max_length=120)
+    username: str = Field(..., min_length=3, max_length=80)
+    email: str | None = Field(default=None, max_length=255)
+    role: UserRole = "member"
+    is_active: bool = True
 
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class AdminPasswordResetRequest(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=128)
 
 
@@ -90,6 +119,17 @@ class AuthSessionRead(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserRead
+
+
+class ActiveSessionRead(BaseModel):
+    id: int
+    token_id: str
+    user_agent: str | None = None
+    ip_address: str | None = None
+    created_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    expires_at: datetime | None = None
+    current: bool = False
 
 
 class CashPositionUpdate(BaseModel):

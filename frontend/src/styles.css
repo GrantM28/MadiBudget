@@ -332,6 +332,57 @@ button {
   font-weight: 700;
 }
 
+.topbar-user-chip-rich {
+  gap: 10px;
+  padding: 8px 12px;
+  min-height: 52px;
+}
+
+.user-badge-avatar,
+.user-badge-initials {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.user-badge-avatar {
+  display: block;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.user-badge-initials {
+  display: inline-grid;
+  place-items: center;
+  background: linear-gradient(135deg, #3261a0, #3a9a7d);
+  color: white;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.user-badge-initials-small {
+  width: 28px;
+  height: 28px;
+  font-size: 0.72rem;
+}
+
+.user-badge-text {
+  display: grid;
+  gap: 2px;
+}
+
+.user-badge-text strong {
+  font-size: 0.92rem;
+}
+
+.user-badge-text small {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
 .control-label,
 .metric-label,
 .summary-list-label,
@@ -1177,6 +1228,144 @@ button {
   justify-content: flex-end;
 }
 
+.household-grid {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.95fr) minmax(340px, 1.05fr);
+  gap: 18px;
+}
+
+.profile-grid {
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
+}
+
+.household-create-grid {
+  grid-template-columns:
+    minmax(190px, 1fr)
+    minmax(170px, 0.95fr)
+    minmax(200px, 1fr)
+    minmax(150px, 0.8fr)
+    minmax(170px, 0.95fr)
+    auto;
+}
+
+.profile-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--bg-table);
+}
+
+.profile-card-meta {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.user-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.user-identity.compact {
+  gap: 10px;
+}
+
+.user-identity-badge {
+  flex-shrink: 0;
+}
+
+.user-identity-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.user-identity-copy strong {
+  font-size: 1rem;
+}
+
+.user-identity-copy span {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.session-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.session-list {
+  display: grid;
+  gap: 12px;
+}
+
+.session-card {
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--bg-table);
+}
+
+.session-card.current {
+  border-color: rgba(60, 130, 214, 0.34);
+  background: linear-gradient(135deg, rgba(60, 130, 214, 0.12), rgba(60, 130, 214, 0.03));
+}
+
+.session-card-main {
+  display: grid;
+  gap: 8px;
+}
+
+.session-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.session-card-device {
+  font-weight: 600;
+}
+
+.session-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.table-user-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.table-user-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.table-user-copy span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.inline-user-editor {
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+}
+
 .field {
   display: grid;
   gap: 7px;
@@ -1456,6 +1645,10 @@ button {
   .dashboard-lower {
     grid-template-columns: 1fr;
   }
+
+  .household-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 1024px) {
@@ -1496,6 +1689,21 @@ button {
 
   .view-grid-wide {
     grid-template-columns: 1fr;
+  }
+
+  .household-create-grid,
+  .profile-grid,
+  .sheet-entry-grid-income {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .profile-card-meta {
+    justify-items: start;
   }
 
   .visualize-layout {

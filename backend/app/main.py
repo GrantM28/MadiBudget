@@ -110,6 +110,13 @@ def _ensure_schema_updates():
                 )
 
     ensure_column("users", "session_version", "session_version INTEGER NOT NULL DEFAULT 0")
+    ensure_column("users", "display_name", "display_name VARCHAR(120) NOT NULL DEFAULT ''")
+    ensure_column("users", "email", "email VARCHAR(255)")
+    ensure_column("users", "role", "role VARCHAR(30) NOT NULL DEFAULT 'member'")
+    ensure_column("users", "avatar_path", "avatar_path VARCHAR(500)")
+    ensure_column("users", "avatar_name", "avatar_name VARCHAR(255)")
+    ensure_column("users", "avatar_content_type", "avatar_content_type VARCHAR(120)")
+    ensure_column("users", "last_login_at", "last_login_at TIMESTAMP WITH TIME ZONE")
     ensure_column(
         "allowance_categories",
         "budget_mode",
