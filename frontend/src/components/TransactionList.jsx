@@ -25,7 +25,7 @@ export default function TransactionList({
   const [editForm, setEditForm] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [bucketFilter, setBucketFilter] = useState("all");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -33,17 +33,23 @@ export default function TransactionList({
     const search = searchQuery.trim().toLowerCase();
 
     return transactions.filter((transaction) => {
+      const bucketLabel =
+        transaction.category_name ||
+        transaction.fixed_expense_name ||
+        (transaction.source_type === "fixed_expense" ? "Fixed Expense" : "");
       const matchesSearch =
         !search ||
         transaction.description.toLowerCase().includes(search) ||
-        transaction.category_name.toLowerCase().includes(search);
+        bucketLabel.toLowerCase().includes(search);
       const matchesType = typeFilter === "all" || transaction.transaction_type === typeFilter;
-      const matchesCategory =
-        categoryFilter === "all" || String(transaction.category_id) === categoryFilter;
+      const matchesBucket =
+        bucketFilter === "all" ||
+        (bucketFilter === "__fixed_expenses__" && transaction.source_type === "fixed_expense") ||
+        String(transaction.category_id) === bucketFilter;
 
-      return matchesSearch && matchesType && matchesCategory;
+      return matchesSearch && matchesType && matchesBucket;
     });
-  }, [transactions, searchQuery, typeFilter, categoryFilter]);
+  }, [transactions, searchQuery, typeFilter, bucketFilter]);
 
   const transactionTotals = useMemo(() => {
     return filteredTransactions.reduce(
@@ -64,6 +70,11 @@ export default function TransactionList({
   }, [filteredTransactions]);
 
   function startEdit(transaction) {
+    if (transaction.locked) {
+      setError("Fixed expense payment rows are edited from Fixed Expenses.");
+      return;
+    }
+
     setEditingId(transaction.id);
     setEditForm({
       description: transaction.description,
@@ -84,7 +95,7 @@ export default function TransactionList({
   function clearFilters() {
     setSearchQuery("");
     setTypeFilter("all");
-    setCategoryFilter("all");
+    setBucketFilter("all");
   }
 
   async function handleSave(transactionId) {
@@ -133,7 +144,7 @@ export default function TransactionList({
         <div>
           <h2>Transaction Register</h2>
           <p className="section-subtitle">
-            Worksheet view of all spending recorded for {month}, with search, filters, and inline editing.
+            Ledger view of all cash activity for {month}, including fixed expenses that were marked paid.
           </p>
         </div>
         <span className="section-count">
@@ -171,7 +182,7 @@ export default function TransactionList({
               id="transaction-search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search merchant or category"
+              placeholder="Search merchant, fixed expense, or category"
             />
           </div>
 
@@ -189,13 +200,14 @@ export default function TransactionList({
           </div>
 
           <div className="field">
-            <label htmlFor="transaction-category-filter">Category</label>
+            <label htmlFor="transaction-category-filter">Bucket</label>
             <select
               id="transaction-category-filter"
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
+              value={bucketFilter}
+              onChange={(event) => setBucketFilter(event.target.value)}
             >
-              <option value="all">All categories</option>
+              <option value="all">All buckets</option>
+              <option value="__fixed_expenses__">Fixed expenses</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
@@ -228,7 +240,8 @@ export default function TransactionList({
                 <th className="row-number-column">#</th>
                 <th>Date</th>
                 <th>Description</th>
-                <th>Category</th>
+                <th>Bucket</th>
+                <th>Source</th>
                 <th>Type</th>
                 <th>Amount</th>
                 <th className="actions-column">Actions</th>
@@ -237,6 +250,8 @@ export default function TransactionList({
             <tbody>
               {filteredTransactions.map((transaction, index) => {
                 const isEditing = editingId === transaction.id;
+                const bucketLabel =
+                  transaction.category_name || transaction.fixed_expense_name || "Not assigned";
 
                 return (
                   <tr key={transaction.id}>
@@ -284,8 +299,17 @@ export default function TransactionList({
                           ))}
                         </select>
                       ) : (
-                        transaction.category_name
+                        bucketLabel
                       )}
+                    </td>
+                    <td>
+                      <span
+                        className={`table-pill ${
+                          transaction.source_type === "fixed_expense" ? "fixed-expense" : "allowance"
+                        }`}
+                      >
+                        {transaction.source_type === "fixed_expense" ? "Fixed Expense" : "Allowance"}
+                      </span>
                     </td>
                     <td>
                       {isEditing ? (
@@ -331,7 +355,9 @@ export default function TransactionList({
                     </td>
                     <td className="actions-column">
                       <div className="action-group">
-                        {isEditing ? (
+                        {transaction.locked ? (
+                          <span className="table-note">Managed in Fixed Expenses</span>
+                        ) : isEditing ? (
                           <>
                             <button
                               className="table-action-button"
@@ -351,22 +377,23 @@ export default function TransactionList({
                             </button>
                           </>
                         ) : (
-                          <button
-                            className="table-action-button"
-                            type="button"
-                            onClick={() => startEdit(transaction)}
-                          >
-                            Edit
-                          </button>
+                          <>
+                            <button
+                              className="table-action-button"
+                              type="button"
+                              onClick={() => startEdit(transaction)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="table-action-button table-action-button-danger"
+                              type="button"
+                              onClick={() => handleDelete(transaction)}
+                            >
+                              Delete
+                            </button>
+                          </>
                         )}
-                        <button
-                          className="table-action-button table-action-button-danger"
-                          type="button"
-                          onClick={() => handleDelete(transaction)}
-                          disabled={submitting && isEditing}
-                        >
-                          Delete
-                        </button>
                       </div>
                     </td>
                   </tr>

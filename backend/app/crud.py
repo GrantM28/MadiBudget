@@ -39,6 +39,12 @@ def _month_bounds(month: str | None) -> tuple[date, date, str]:
     return start, end, label
 
 
+def _due_date_for_month(due_day: int, month: str | None) -> date:
+    start, _, _ = _month_bounds(month)
+    due_day_for_month = min(due_day, monthrange(start.year, start.month)[1])
+    return date(start.year, start.month, due_day_for_month)
+
+
 def _average_monthly_income(amount: Decimal, frequency: str) -> Decimal:
     if frequency == "weekly":
         return amount * Decimal("52") / Decimal("12")
@@ -80,6 +86,24 @@ def _income_source_monthly_amount(
         return amount * paychecks
 
     return amount
+
+
+def _serialize_bill(
+    bill: models.Bill,
+    payment: models.FixedExpensePayment | None,
+    month: str | None,
+) -> schemas.BillRead:
+    return schemas.BillRead(
+        id=bill.id,
+        name=bill.name,
+        amount=bill.amount,
+        due_day=bill.due_day,
+        recurring=bill.recurring,
+        type=bill.type,
+        due_date_for_month=_due_date_for_month(bill.due_day, month),
+        paid_date=payment.paid_date if payment else None,
+        is_paid_for_month=payment is not None,
+    )
 
 
 def list_incomes(db: Session):
@@ -165,8 +189,15 @@ def delete_variable_income_entry(db: Session, entry_id: int):
     db.commit()
 
 
-def list_bills(db: Session):
-    return db.scalars(select(models.Bill).order_by(models.Bill.due_day.asc(), models.Bill.name.asc())).all()
+def list_bills(db: Session, month: str | None = None):
+    _, _, label = _month_bounds(month)
+    bills = db.scalars(select(models.Bill).order_by(models.Bill.due_day.asc(), models.Bill.name.asc())).all()
+    payments = db.scalars(
+        select(models.FixedExpensePayment).where(models.FixedExpensePayment.month_label == label)
+    ).all()
+    payments_by_bill = {payment.bill_id: payment for payment in payments}
+
+    return [_serialize_bill(bill, payments_by_bill.get(bill.id), label) for bill in bills]
 
 
 def create_bill(db: Session, bill: schemas.BillCreate):
@@ -174,28 +205,129 @@ def create_bill(db: Session, bill: schemas.BillCreate):
     db.add(record)
     db.commit()
     db.refresh(record)
-    return record
+    return _serialize_bill(record, None, None)
 
 
 def update_bill(db: Session, bill_id: int, bill: schemas.BillUpdate):
     record = db.get(models.Bill, bill_id)
     if not record:
-        raise LookupError("Bill not found.")
+        raise LookupError("Fixed expense not found.")
 
     for field, value in bill.model_dump().items():
         setattr(record, field, value)
 
+    payment_rows = db.scalars(
+        select(models.FixedExpensePayment).where(models.FixedExpensePayment.bill_id == bill_id)
+    ).all()
+    for payment in payment_rows:
+        transaction = db.scalar(
+            select(models.Transaction).where(
+                models.Transaction.fixed_expense_payment_id == payment.id
+            )
+        )
+        if transaction:
+            transaction.description = record.name
+            transaction.amount = record.amount
+
     db.commit()
     db.refresh(record)
-    return record
+    return _serialize_bill(record, None, None)
 
 
 def delete_bill(db: Session, bill_id: int):
     record = db.get(models.Bill, bill_id)
     if not record:
-        raise LookupError("Bill not found.")
+        raise LookupError("Fixed expense not found.")
+
+    payment_rows = db.scalars(
+        select(models.FixedExpensePayment).where(models.FixedExpensePayment.bill_id == bill_id)
+    ).all()
+    for payment in payment_rows:
+        linked_transaction = db.scalar(
+            select(models.Transaction).where(
+                models.Transaction.fixed_expense_payment_id == payment.id
+            )
+        )
+        if linked_transaction:
+            db.delete(linked_transaction)
+        db.delete(payment)
 
     db.delete(record)
+    db.commit()
+
+
+def set_bill_payment(db: Session, bill_id: int, payload: schemas.BillPaymentUpdate):
+    bill = db.get(models.Bill, bill_id)
+    if not bill:
+        raise LookupError("Fixed expense not found.")
+
+    _, _, label = _month_bounds(payload.month)
+    payment = db.scalar(
+        select(models.FixedExpensePayment).where(
+            models.FixedExpensePayment.bill_id == bill_id,
+            models.FixedExpensePayment.month_label == label,
+        )
+    )
+
+    if not payment:
+        payment = models.FixedExpensePayment(
+            bill_id=bill_id,
+            month_label=label,
+            paid_date=payload.paid_date,
+        )
+        db.add(payment)
+        db.flush()
+    else:
+        payment.paid_date = payload.paid_date
+
+    linked_transaction = db.scalar(
+        select(models.Transaction).where(
+            models.Transaction.fixed_expense_payment_id == payment.id
+        )
+    )
+    if not linked_transaction:
+        linked_transaction = models.Transaction(
+            description=bill.name,
+            amount=bill.amount,
+            date=payload.paid_date,
+            transaction_type="expense",
+            category_id=None,
+            fixed_expense_payment_id=payment.id,
+        )
+        db.add(linked_transaction)
+    else:
+        linked_transaction.description = bill.name
+        linked_transaction.amount = bill.amount
+        linked_transaction.date = payload.paid_date
+        linked_transaction.transaction_type = "expense"
+        linked_transaction.category_id = None
+
+    db.commit()
+    db.refresh(bill)
+    db.refresh(payment)
+    return _serialize_bill(bill, payment, label)
+
+
+def clear_bill_payment(db: Session, bill_id: int, month: str):
+    _, _, label = _month_bounds(month)
+    payment = db.scalar(
+        select(models.FixedExpensePayment).where(
+            models.FixedExpensePayment.bill_id == bill_id,
+            models.FixedExpensePayment.month_label == label,
+        )
+    )
+    if not payment:
+        raise LookupError("No paid date is recorded for that fixed expense in this month.")
+
+    linked_transaction = db.scalar(
+        select(models.Transaction).where(
+            models.Transaction.fixed_expense_payment_id == payment.id
+        )
+    )
+    if linked_transaction:
+        db.delete(linked_transaction)
+
+    db.delete(payment)
     db.commit()
 
 
@@ -266,8 +398,18 @@ def delete_category(db: Session, category_id: int):
 def list_transactions(db: Session, month: str | None = None):
     start, end, _ = _month_bounds(month)
     rows = db.execute(
-        select(models.Transaction, models.AllowanceCategory.name)
-        .join(models.AllowanceCategory, models.Transaction.category_id == models.AllowanceCategory.id)
+        select(
+            models.Transaction,
+            models.AllowanceCategory.name,
+            models.Bill.id,
+            models.Bill.name,
+        )
+        .outerjoin(models.AllowanceCategory, models.Transaction.category_id == models.AllowanceCategory.id)
+        .outerjoin(
+            models.FixedExpensePayment,
+            models.Transaction.fixed_expense_payment_id == models.FixedExpensePayment.id,
+        )
+        .outerjoin(models.Bill, models.FixedExpensePayment.bill_id == models.Bill.id)
         .where(models.Transaction.date >= start, models.Transaction.date <= end)
         .order_by(models.Transaction.date.desc(), models.Transaction.id.desc())
     ).all()
@@ -281,8 +423,12 @@ def list_transactions(db: Session, month: str | None = None):
             transaction_type=transaction.transaction_type,
             category_id=transaction.category_id,
             category_name=category_name,
+            source_type="fixed_expense" if fixed_expense_id else "allowance",
+            fixed_expense_id=fixed_expense_id,
+            fixed_expense_name=fixed_expense_name,
+            locked=transaction.fixed_expense_payment_id is not None,
         )
-        for transaction, category_name in rows
+        for transaction, category_name, fixed_expense_id, fixed_expense_name in rows
     ]
 
 
@@ -304,6 +450,10 @@ def create_transaction(db: Session, transaction: schemas.TransactionCreate):
         transaction_type=record.transaction_type,
         category_id=record.category_id,
         category_name=category.name,
+        source_type="allowance",
+        fixed_expense_id=None,
+        fixed_expense_name=None,
+        locked=False,
     )
 
 
@@ -311,6 +461,8 @@ def update_transaction(db: Session, transaction_id: int, transaction: schemas.Tr
     record = db.get(models.Transaction, transaction_id)
     if not record:
         raise LookupError("Transaction not found.")
+    if record.fixed_expense_payment_id is not None:
+        raise ValueError("Fixed expense payments are updated from Fixed Expenses.")
 
     category = db.get(models.AllowanceCategory, transaction.category_id)
     if not category:
@@ -330,6 +482,10 @@ def update_transaction(db: Session, transaction_id: int, transaction: schemas.Tr
         transaction_type=record.transaction_type,
         category_id=record.category_id,
         category_name=category.name,
+        source_type="allowance",
+        fixed_expense_id=None,
+        fixed_expense_name=None,
+        locked=False,
     )
 
 
@@ -337,6 +493,8 @@ def delete_transaction(db: Session, transaction_id: int):
     record = db.get(models.Transaction, transaction_id)
     if not record:
         raise LookupError("Transaction not found.")
+    if record.fixed_expense_payment_id is not None:
+        raise ValueError("Fixed expense payments are removed from Fixed Expenses.")
 
     db.delete(record)
     db.commit()
@@ -389,7 +547,11 @@ def calculate_dashboard(db: Session, month: str | None = None):
                 0,
             ),
         )
-        .where(models.Transaction.date >= start, models.Transaction.date <= end)
+        .where(
+            models.Transaction.date >= start,
+            models.Transaction.date <= end,
+            models.Transaction.category_id.is_not(None),
+        )
         .group_by(models.Transaction.category_id)
     ).all()
     spent_by_category = {

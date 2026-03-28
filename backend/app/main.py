@@ -57,6 +57,27 @@ def _ensure_schema_updates():
                         "ADD COLUMN transaction_type VARCHAR(20) NOT NULL DEFAULT 'expense'"
                     )
                 )
+        if "fixed_expense_payment_id" not in transaction_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE transactions "
+                        "ADD COLUMN fixed_expense_payment_id INTEGER"
+                    )
+                )
+
+        category_column = next(
+            (column for column in inspector.get_columns("transactions") if column["name"] == "category_id"),
+            None,
+        )
+        if category_column and not category_column.get("nullable", True):
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE transactions "
+                        "ALTER COLUMN category_id DROP NOT NULL"
+                    )
+                )
 
     if "income_sources" in inspector.get_table_names():
         income_columns = {

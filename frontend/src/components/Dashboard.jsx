@@ -25,21 +25,21 @@ export default function Dashboard({ dashboard, plan, month }) {
   const budgetUsagePercent =
     totalAllowances > 0 ? Math.max(0, (totalSpent / totalAllowances) * 100) : 0;
 
-  let statusLabel = "On track";
-  let statusClass = "safe-positive";
-  let statusMessage = "Current spending is still inside the monthly category plan.";
+      let statusLabel = "On track";
+      let statusClass = "safe-positive";
+      let statusMessage = "Current spending is still inside the monthly category plan.";
 
   if (availableNow < 0) {
     statusLabel = "Over budget now";
     statusClass = "safe-negative";
     statusMessage =
-      "You have already spent beyond the money left after bills and remaining category allowances.";
+      "You have already spent beyond the money left after fixed expenses and remaining category allowances.";
   } else if (overBudgetTotal > 0) {
     statusLabel = "Categories over budget";
     statusClass = "safe-negative";
     statusMessage =
       "Some categories are already over budget, even if the overall month still has cash left.";
-  } else if (plannedCushion < 0) {
+      } else if (plannedCushion < 0) {
     statusLabel = "Plan is short";
     statusClass = "safe-negative";
     statusMessage =
@@ -210,9 +210,9 @@ export default function Dashboard({ dashboard, plan, month }) {
         </article>
 
         <article className="metric-card">
-          <div className="metric-label">Total Bills</div>
+          <div className="metric-label">Total Fixed Expenses</div>
           <div className="metric-value">{formatMoney(dashboard.total_bills)}</div>
-          <div className="metric-note">Required bills and obligations for the month.</div>
+          <div className="metric-note">Required fixed monthly obligations for the month.</div>
         </article>
 
         <article className="metric-card">
@@ -335,7 +335,7 @@ export default function Dashboard({ dashboard, plan, month }) {
 
           <div className="summary-stack">
             <div className="summary-tile">
-              <span className="summary-list-label">Buffer After Bills</span>
+              <span className="summary-list-label">Buffer After Fixed Expenses</span>
               <strong>{formatMoney(plan.buffer_after_bills)}</strong>
             </div>
 

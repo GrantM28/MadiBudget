@@ -18,7 +18,7 @@ function currentMonthValue() {
 const navItems = [
   { id: "dashboard", label: "Dashboard" },
   { id: "transactions", label: "Transactions" },
-  { id: "bills", label: "Bills" },
+  { id: "bills", label: "Fixed Expenses" },
   { id: "income", label: "Income" },
   { id: "categories", label: "Categories" },
   { id: "visualize", label: "Visualize" },
@@ -55,7 +55,7 @@ export default function App() {
         api.getPlan(month),
         api.getIncomes(),
         api.getIncomeAdjustments(month),
-        api.getBills(),
+        api.getBills(month),
         api.getCategories(),
         api.getTransactions(month),
       ]);
@@ -123,6 +123,16 @@ export default function App() {
     await loadData();
   }
 
+  async function handleSetBillPayment(id, payload) {
+    await api.setBillPayment(id, payload);
+    await loadData();
+  }
+
+  async function handleClearBillPayment(id) {
+    await api.clearBillPayment(id, month);
+    await loadData();
+  }
+
   async function handleCreateCategory(payload) {
     await api.createCategory(payload);
     await loadData();
@@ -180,7 +190,7 @@ export default function App() {
         </nav>
 
         <div className="sidebar-footnote">
-          Track cash flow, protect bills, and stay inside category limits.
+          Track cash flow, protect fixed expenses, and stay inside category limits.
         </div>
       </aside>
 
@@ -235,9 +245,12 @@ export default function App() {
           {activeView === "bills" ? (
             <BillList
               bills={bills}
+              month={month}
               onCreate={handleCreateBill}
               onUpdate={handleUpdateBill}
               onDelete={handleDeleteBill}
+              onSetPayment={handleSetBillPayment}
+              onClearPayment={handleClearBillPayment}
             />
           ) : null}
 

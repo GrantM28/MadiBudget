@@ -140,10 +140,14 @@ export default function TransactionForm({ categories, onCreate }) {
         </div>
 
         {orderedCategories.length === 0 ? (
-          <p className="helper-text">
-            Add categories first. Freeform transaction categories are intentionally disabled.
-          </p>
-        ) : null}
+        <p className="helper-text">
+          Add categories first. Freeform transaction categories are intentionally disabled.
+        </p>
+      ) : null}
+
+        <p className="helper-text">
+          Fixed expenses are handled in <strong>Fixed Expenses</strong>. When you mark one paid there, MadiBudget adds the matching ledger row here automatically.
+        </p>
 
         <p className="helper-text">
           Use <strong>Money In / Refund</strong> for Amazon refunds, Venmo paybacks, reimbursements, or other money coming back in.

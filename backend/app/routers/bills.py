@@ -9,8 +9,11 @@ router = APIRouter(tags=["bills"])
 
 
 @router.get("/bills", response_model=list[schemas.BillRead])
-def get_bills(db: Session = Depends(get_db)):
-    return crud.list_bills(db)
+def get_bills(month: str | None = None, db: Session = Depends(get_db)):
+    try:
+        return crud.list_bills(db, month)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
 
 
 @router.post("/bills", response_model=schemas.BillRead, status_code=201)
@@ -31,5 +34,30 @@ def delete_bill(bill_id: int, db: Session = Depends(get_db)):
     try:
         crud.delete_bill(db, bill_id)
         return Response(status_code=204)
+    except LookupError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+
+@router.put("/bills/{bill_id}/payment", response_model=schemas.BillRead)
+def set_bill_payment(
+    bill_id: int,
+    payment: schemas.BillPaymentUpdate,
+    db: Session = Depends(get_db),
+):
+    try:
+        return crud.set_bill_payment(db, bill_id, payment)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    except LookupError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+
+@router.delete("/bills/{bill_id}/payment", status_code=204)
+def clear_bill_payment(bill_id: int, month: str, db: Session = Depends(get_db)):
+    try:
+        crud.clear_bill_payment(db, bill_id, month)
+        return Response(status_code=204)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     except LookupError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error

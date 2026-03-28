@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 Frequency = Literal["weekly", "biweekly", "monthly"]
 BillType = Literal["bill", "chapter13"]
 TransactionDirection = Literal["expense", "income"]
+TransactionSource = Literal["allowance", "fixed_expense"]
 
 
 class IncomeSourceBase(BaseModel):
@@ -57,7 +58,7 @@ class BillBase(BaseModel):
     amount: Decimal = Field(..., gt=0)
     due_day: int = Field(..., ge=1, le=31)
     recurring: bool = True
-    type: BillType
+    type: BillType = "bill"
 
 
 class BillCreate(BillBase):
@@ -68,8 +69,16 @@ class BillUpdate(BillBase):
     pass
 
 
+class BillPaymentUpdate(BaseModel):
+    month: str
+    paid_date: date
+
+
 class BillRead(BillBase):
     id: int
+    due_date_for_month: date | None = None
+    paid_date: date | None = None
+    is_paid_for_month: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -93,7 +102,7 @@ class AllowanceCategoryRead(AllowanceCategoryBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class TransactionBase(BaseModel):
+class TransactionCreate(BaseModel):
     description: str = Field(..., min_length=1, max_length=255)
     amount: Decimal = Field(..., gt=0)
     date: date
@@ -101,17 +110,22 @@ class TransactionBase(BaseModel):
     category_id: int
 
 
-class TransactionCreate(TransactionBase):
+class TransactionUpdate(TransactionCreate):
     pass
 
 
-class TransactionUpdate(TransactionBase):
-    pass
-
-
-class TransactionRead(TransactionBase):
+class TransactionRead(BaseModel):
     id: int
-    category_name: str
+    description: str
+    amount: Decimal
+    date: date
+    transaction_type: TransactionDirection
+    category_id: int | None = None
+    category_name: str | None = None
+    source_type: TransactionSource = "allowance"
+    fixed_expense_id: int | None = None
+    fixed_expense_name: str | None = None
+    locked: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

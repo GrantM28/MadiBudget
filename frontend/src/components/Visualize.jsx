@@ -221,7 +221,8 @@ export default function Visualize({ transactions, month, categories }) {
       const matchesDescription =
         selectedDescriptions.length === 0 || selectedDescriptionsSet.has(transaction.description);
       const matchesCategory =
-        selectedCategoryIds.length === 0 || selectedCategoriesSet.has(String(transaction.category_id));
+        selectedCategoryIds.length === 0 ||
+        (transaction.category_id != null && selectedCategoriesSet.has(String(transaction.category_id)));
 
       return matchesDescription && matchesCategory;
     });
@@ -253,9 +254,12 @@ export default function Visualize({ transactions, month, categories }) {
       let shortLabel = transaction.description.slice(0, 10);
 
       if (groupBy === "category") {
-        label = transaction.category_name;
-        sortKey = transaction.category_name;
-        shortLabel = transaction.category_name.slice(0, 10);
+        label =
+          transaction.category_name ||
+          transaction.fixed_expense_name ||
+          (transaction.source_type === "fixed_expense" ? "Fixed Expense" : "Unassigned");
+        sortKey = label;
+        shortLabel = label.slice(0, 10);
       } else if (groupBy === "day") {
         label = transaction.date;
         sortKey = transaction.date;

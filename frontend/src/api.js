@@ -68,7 +68,7 @@ export const api = {
     request(`/income-adjustments/${id}`, {
       method: "DELETE",
     }),
-  getBills: () => request("/bills"),
+  getBills: (month) => request(`/bills?month=${encodeURIComponent(month)}`),
   createBill: (payload) =>
     request("/bills", {
       method: "POST",
@@ -81,6 +81,15 @@ export const api = {
     }),
   deleteBill: (id) =>
     request(`/bills/${id}`, {
+      method: "DELETE",
+    }),
+  setBillPayment: (id, payload) =>
+    request(`/bills/${id}/payment`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  clearBillPayment: (id, month) =>
+    request(`/bills/${id}/payment?month=${encodeURIComponent(month)}`, {
       method: "DELETE",
     }),
   getCategories: () => request("/categories"),
