@@ -53,6 +53,33 @@ class VariableIncomeRead(VariableIncomeBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserRead(BaseModel):
+    id: int
+    username: str
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=80)
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+class UserSetupCreate(LoginRequest):
+    pass
+
+
+class AuthStatusRead(BaseModel):
+    setup_required: bool
+
+
+class AuthSessionRead(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserRead
+
+
 class CashPositionUpdate(BaseModel):
     current_balance: Decimal
     balance_as_of: date

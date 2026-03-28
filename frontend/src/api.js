@@ -1,14 +1,56 @@
+function isDirectBackendHost(hostname) {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostname)
+  );
+}
+
 const runtimeApiBase =
   typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    ? isDirectBackendHost(window.location.hostname)
+      ? `${window.location.protocol}//${window.location.hostname}:8000`
+      : window.location.origin
     : "http://localhost:8000";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL?.trim() || runtimeApiBase;
+const AUTH_TOKEN_KEY = "madibudget_auth_token";
+
+let authToken =
+  typeof window !== "undefined" ? window.localStorage.getItem(AUTH_TOKEN_KEY) || "" : "";
+
+function setAuthToken(token) {
+  authToken = token || "";
+  if (typeof window !== "undefined") {
+    if (authToken) {
+      window.localStorage.setItem(AUTH_TOKEN_KEY, authToken);
+    } else {
+      window.localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+  }
+}
+
+function clearAuthToken() {
+  setAuthToken("");
+}
+
+function hasAuthToken() {
+  return Boolean(authToken);
+}
+
+function notifyAuthExpired() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("madibudget:auth-expired"));
+  }
+}
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
       "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...(options.headers || {}),
     },
     ...options,
@@ -17,6 +59,11 @@ async function request(path, options = {}) {
   if (!response.ok) {
     let message = "Request failed.";
 
+    if (response.status === 401) {
+      clearAuthToken();
+      notifyAuthExpired();
+    }
+
     try {
       const errorData = await response.json();
       message = errorData.detail || message;
@@ -24,7 +71,9 @@ async function request(path, options = {}) {
       message = response.statusText || message;
     }
 
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
 
   if (response.status === 204) {
@@ -35,6 +84,21 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  hasAuthToken,
+  setAuthToken,
+  clearAuthToken,
+  getAuthStatus: () => request("/auth/status"),
+  setupFirstUser: (payload) =>
+    request("/auth/setup", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  login: (payload) =>
+    request("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getMe: () => request("/auth/me"),
   getDashboard: (month) => request(`/dashboard?month=${encodeURIComponent(month)}`),
   getPlan: (month) => request(`/plan?month=${encodeURIComponent(month)}`),
   getCashPosition: () => request("/cash-position"),

@@ -4,7 +4,7 @@ MadiBudget is a self-hosted household budgeting and cash-flow app designed for a
 
 > How much can we safely spend right now without messing up bills, the Chapter 13 payment, and monthly allowance categories?
 
-This version is intentionally focused on one household and one backend API as the source of truth. There is no authentication, multi-household logic, bank integration, or SaaS billing in v1.
+This version is intentionally focused on one household and one backend API as the source of truth. It now includes a simple household login, but it still avoids multi-household logic, bank integrations, and SaaS billing.
 
 ## What It Does
 
@@ -22,6 +22,7 @@ This version is intentionally focused on one household and one backend API as th
 - Frontend: React + Vite
 - Backend: FastAPI + SQLAlchemy
 - Database: PostgreSQL
+- Auth: JWT bearer token auth with hashed passwords
 - Deployment: Docker Compose
 
 ## Folder Structure
@@ -93,6 +94,14 @@ biweekly = amount * 26 / 12
 monthly  = amount
 ```
 
+## Security and Login
+
+- The API is protected with bearer-token authentication.
+- Passwords are hashed with `bcrypt` through `passlib`.
+- The first time you open the app, MadiBudget will ask you to create the first household login.
+- After first-run setup, the UI switches to normal sign-in.
+- Set `AUTH_SECRET_KEY` to a long random secret before exposing the app through your reverse proxy.
+
 ## Run Locally Without Docker
 
 ### 1. Start PostgreSQL
@@ -120,6 +129,7 @@ python -m venv .venv
 pip install -r requirements.txt
 $env:DATABASE_URL="postgresql://madibudget:madibudget@localhost:5433/madibudget"
 $env:CORS_ORIGINS="http://localhost:3040,http://127.0.0.1:3040"
+$env:AUTH_SECRET_KEY="change-this-to-a-long-random-secret"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -168,6 +178,12 @@ npm run dev -- --host 0.0.0.0 --port 3040
 Copy-Item .env.example .env
 ```
 
+Update at least:
+
+- `AUTH_SECRET_KEY`
+- `CORS_ORIGINS`
+- optionally `VITE_API_URL` if your reverse proxy does not serve frontend and API from the same host
+
 ### 2. Build and start
 
 ```bash
@@ -188,6 +204,10 @@ docker compose exec madibudget-backend python -m app.seed
 
 ## API Endpoints
 
+- `GET /auth/status`
+- `POST /auth/setup`
+- `POST /auth/login`
+- `GET /auth/me`
 - `GET /dashboard`
 - `GET /incomes`
 - `POST /incomes`
@@ -208,9 +228,11 @@ Optional month filters:
 ## First-Run Notes
 
 - The backend creates database tables automatically on startup.
+- On the very first visit, create the first household login from the sign-in screen.
 - You should seed categories before adding transactions, because transactions require a valid existing category.
-- The frontend uses either `VITE_API_URL` or the current browser hostname with port `8000`.
+- The frontend uses `VITE_API_URL` when provided. Otherwise it defaults to `:8000` on local/private-network hosts and same-origin on custom domains like `budget.gmadi.me`.
 - LAN IP access like `http://192.168.x.x:3040` is allowed by default for self-hosted local-network use.
+- If you deploy behind `https://budget.gmadi.me`, add that origin to `CORS_ORIGINS` if the browser is calling the API across origins.
 
 ## Likely Issues To Watch For
 
@@ -218,4 +240,4 @@ Optional month filters:
 - If you open the frontend from another machine, make sure port `8000` is reachable from that device too.
 - If CORS blocks requests during local development, update `CORS_ORIGINS`.
 - If you use a custom hostname instead of `localhost` or a private-network IP, add it to `CORS_ORIGINS` or set `CORS_ALLOW_ORIGIN_REGEX`.
-- The frontend does not include auth yet, so keep the app on a trusted network.
+- If `AUTH_SECRET_KEY` is left at the default development value, your deployment is not secure enough for internet exposure.

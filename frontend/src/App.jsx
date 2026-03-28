@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
+import AuthScreen from "./components/AuthScreen";
 import Dashboard from "./components/Dashboard";
 import IncomeList from "./components/IncomeList";
 import BillList from "./components/BillList";
@@ -27,6 +28,10 @@ const navItems = [
 export default function App() {
   const [month, setMonth] = useState(currentMonthValue());
   const [activeView, setActiveView] = useState("dashboard");
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [plan, setPlan] = useState(null);
   const [cashPosition, setCashPosition] = useState(null);
@@ -38,7 +43,43 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  async function initializeAuth() {
+    setAuthLoading(true);
+    setError("");
+
+    try {
+      const status = await api.getAuthStatus();
+      setSetupRequired(status.setup_required);
+
+      if (status.setup_required) {
+        setCurrentUser(null);
+        setLoading(false);
+        return;
+      }
+
+      if (!api.hasAuthToken()) {
+        setCurrentUser(null);
+        setLoading(false);
+        return;
+      }
+
+      const me = await api.getMe();
+      setCurrentUser(me);
+    } catch (requestError) {
+      api.clearAuthToken();
+      setCurrentUser(null);
+      setError(requestError.message || "Unable to verify login.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
   async function loadData() {
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError("");
 
@@ -72,6 +113,19 @@ export default function App() {
       setCategories(categoriesData);
       setTransactions(transactionsData);
     } catch (requestError) {
+      if (requestError.status === 401) {
+        api.clearAuthToken();
+        setCurrentUser(null);
+        setSetupRequired(false);
+        setDashboard(null);
+        setPlan(null);
+        setCashPosition(null);
+        setIncomes([]);
+        setIncomeAdjustments([]);
+        setBills([]);
+        setCategories([]);
+        setTransactions([]);
+      }
       setError(requestError.message || "Unable to load MadiBudget data.");
     } finally {
       setLoading(false);
@@ -79,8 +133,80 @@ export default function App() {
   }
 
   useEffect(() => {
-    loadData();
-  }, [month]);
+    initializeAuth();
+  }, []);
+
+  useEffect(() => {
+    function handleAuthExpired() {
+      setCurrentUser(null);
+      setDashboard(null);
+      setPlan(null);
+      setCashPosition(null);
+      setIncomes([]);
+      setIncomeAdjustments([]);
+      setBills([]);
+      setCategories([]);
+      setTransactions([]);
+      setLoading(false);
+      setError("Your session expired. Please sign in again.");
+    }
+
+    window.addEventListener("madibudget:auth-expired", handleAuthExpired);
+    return () => window.removeEventListener("madibudget:auth-expired", handleAuthExpired);
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && currentUser) {
+      loadData();
+    }
+  }, [authLoading, currentUser, month]);
+
+  async function handleSetup(credentials) {
+    setAuthSubmitting(true);
+    setError("");
+
+    try {
+      const session = await api.setupFirstUser(credentials);
+      api.setAuthToken(session.access_token);
+      setCurrentUser(session.user);
+      setSetupRequired(false);
+    } catch (requestError) {
+      setError(requestError.message || "Unable to create the first login.");
+    } finally {
+      setAuthSubmitting(false);
+    }
+  }
+
+  async function handleLogin(credentials) {
+    setAuthSubmitting(true);
+    setError("");
+
+    try {
+      const session = await api.login(credentials);
+      api.setAuthToken(session.access_token);
+      setCurrentUser(session.user);
+      setSetupRequired(false);
+    } catch (requestError) {
+      setError(requestError.message || "Unable to sign in.");
+    } finally {
+      setAuthSubmitting(false);
+    }
+  }
+
+  function handleLogout() {
+    api.clearAuthToken();
+    setCurrentUser(null);
+    setDashboard(null);
+    setPlan(null);
+    setCashPosition(null);
+    setIncomes([]);
+    setIncomeAdjustments([]);
+    setBills([]);
+    setCategories([]);
+    setTransactions([]);
+    setLoading(false);
+    setError("");
+  }
 
   async function handleCreateIncome(payload) {
     await api.createIncome(payload);
@@ -174,6 +300,22 @@ export default function App() {
 
   const activeNav = navItems.find((item) => item.id === activeView);
 
+  if (authLoading) {
+    return <div className="auth-loading">Checking secure session...</div>;
+  }
+
+  if (!currentUser) {
+    return (
+      <AuthScreen
+        setupRequired={setupRequired}
+        submitting={authSubmitting}
+        error={error}
+        onLogin={handleLogin}
+        onSetup={handleSetup}
+      />
+    );
+  }
+
   return (
     <div className="app-frame">
       <aside className="sidebar">
@@ -214,16 +356,34 @@ export default function App() {
           </div>
 
           <div className="topbar-controls">
-            <label className="control-label" htmlFor="planning-month">
-              Month
-            </label>
-            <input
-              id="planning-month"
-              className="month-input"
-              type="month"
-              value={month}
-              onChange={(event) => setMonth(event.target.value)}
-            />
+            <div className="topbar-controls-stack">
+              <div className="topbar-user-row">
+                <div>
+                  <label className="control-label">Signed In</label>
+                  <div className="topbar-user-chip">{currentUser.username}</div>
+                </div>
+                <button
+                  type="button"
+                  className="table-action-button"
+                  onClick={handleLogout}
+                >
+                  Sign Out
+                </button>
+              </div>
+
+              <div>
+                <label className="control-label" htmlFor="planning-month">
+                  Month
+                </label>
+                <input
+                  id="planning-month"
+                  className="month-input"
+                  type="month"
+                  value={month}
+                  onChange={(event) => setMonth(event.target.value)}
+                />
+              </div>
+            </div>
           </div>
         </header>
 

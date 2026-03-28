@@ -1,5 +1,6 @@
-from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from .db import Base
 
@@ -13,6 +14,16 @@ class IncomeSource(Base):
     frequency = Column(String(20), nullable=False)
     payday_reference_date = Column(Date, nullable=True)
     active = Column(Boolean, nullable=False, default=True, server_default="true")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(80), nullable=False, unique=True, index=True)
+    password_hash = Column(String(255), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class VariableIncomeEntry(Base):

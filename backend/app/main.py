@@ -1,16 +1,20 @@
 import os
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
-from . import models
+from . import auth, models
 from .db import Base, engine
+from .routers import auth as auth_router
 from .routers import bills, categories, dashboard, incomes, plan, transactions
 
 
 def _cors_origins() -> list[str]:
-    raw = os.getenv("CORS_ORIGINS", "http://localhost:3040,http://127.0.0.1:3040")
+    raw = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3040,http://127.0.0.1:3040,https://budget.gmadi.me",
+    )
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
@@ -30,7 +34,7 @@ def _cors_origin_regex() -> str:
 app = FastAPI(
     title="MadiBudget API",
     version="1.0.0",
-    description="Backend API for the MadiBudget Chapter 13 household budgeting app.",
+    description="Backend API for the MadiBudget household budgeting app.",
 )
 
 app.add_middleware(
@@ -41,6 +45,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 def _ensure_schema_updates():
     inspector = inspect(engine)
@@ -95,7 +100,7 @@ def _ensure_schema_updates():
 
 @app.on_event("startup")
 def on_startup():
-    models  # Keeps model import explicit for table discovery.
+    models
     Base.metadata.create_all(bind=engine)
     _ensure_schema_updates()
 
@@ -105,9 +110,10 @@ def health():
     return {"status": "ok", "app": "MadiBudget"}
 
 
-app.include_router(dashboard.router)
-app.include_router(incomes.router)
-app.include_router(bills.router)
-app.include_router(categories.router)
-app.include_router(transactions.router)
-app.include_router(plan.router)
+app.include_router(auth_router.router)
+app.include_router(dashboard.router, dependencies=[Depends(auth.require_current_user)])
+app.include_router(incomes.router, dependencies=[Depends(auth.require_current_user)])
+app.include_router(bills.router, dependencies=[Depends(auth.require_current_user)])
+app.include_router(categories.router, dependencies=[Depends(auth.require_current_user)])
+app.include_router(transactions.router, dependencies=[Depends(auth.require_current_user)])
+app.include_router(plan.router, dependencies=[Depends(auth.require_current_user)])
