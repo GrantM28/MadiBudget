@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -15,25 +15,53 @@ const initialForm = {
   due_day: "",
 };
 
-export default function BillList({ bills, onCreate }) {
+export default function BillList({ bills, onCreate, onUpdate, onDelete }) {
   const [form, setForm] = useState(initialForm);
+  const [editingId, setEditingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  const sortedBills = useMemo(
+    () => [...bills].sort((a, b) => a.due_day - b.due_day || a.name.localeCompare(b.name)),
+    [bills],
+  );
+
+  function resetForm() {
+    setForm(initialForm);
+    setEditingId(null);
+    setError("");
+  }
+
+  function startEdit(bill) {
+    setEditingId(bill.id);
+    setForm({
+      name: bill.name,
+      amount: String(bill.amount),
+      due_day: String(bill.due_day),
+    });
+    setError("");
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);
     setError("");
 
+    const payload = {
+      ...form,
+      amount: Number(form.amount),
+      due_day: Number(form.due_day),
+      recurring: true,
+      type: "bill",
+    };
+
     try {
-      await onCreate({
-        ...form,
-        amount: Number(form.amount),
-        due_day: Number(form.due_day),
-        recurring: true,
-        type: "bill",
-      });
-      setForm(initialForm);
+      if (editingId) {
+        await onUpdate(editingId, payload);
+      } else {
+        await onCreate(payload);
+      }
+      resetForm();
     } catch (submitError) {
       setError(submitError.message || "Unable to save bill.");
     } finally {
@@ -41,7 +69,22 @@ export default function BillList({ bills, onCreate }) {
     }
   }
 
-  const sortedBills = [...bills].sort((a, b) => a.due_day - b.due_day || a.name.localeCompare(b.name));
+  async function handleDelete(bill) {
+    const confirmed = window.confirm(`Delete bill "${bill.name}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    try {
+      await onDelete(bill.id);
+      if (editingId === bill.id) {
+        resetForm();
+      }
+    } catch (deleteError) {
+      setError(deleteError.message || "Unable to delete bill.");
+    }
+  }
 
   return (
     <section className="section-card section-card-sheet">
@@ -49,7 +92,7 @@ export default function BillList({ bills, onCreate }) {
         <div>
           <h2>Bills</h2>
           <p className="section-subtitle">
-            Enter and review recurring monthly bills in a worksheet-style schedule.
+            Enter, edit, and organize recurring monthly bills in a worksheet-style schedule.
           </p>
         </div>
         <span className="section-count">{bills.length}</span>
@@ -97,9 +140,20 @@ export default function BillList({ bills, onCreate }) {
           </div>
 
           <div className="sheet-entry-actions">
-            <button className="button" type="submit" disabled={submitting}>
-              {submitting ? "Saving..." : "Add Bill"}
-            </button>
+            <div className="action-group action-group-compact">
+              <button className="button" type="submit" disabled={submitting}>
+                {submitting ? "Saving..." : editingId ? "Save Changes" : "Add Bill"}
+              </button>
+              {editingId ? (
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  onClick={resetForm}
+                >
+                  Cancel
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -118,6 +172,7 @@ export default function BillList({ bills, onCreate }) {
                 <th>Due Day</th>
                 <th>Status</th>
                 <th>Amount</th>
+                <th className="actions-column">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -128,6 +183,24 @@ export default function BillList({ bills, onCreate }) {
                   <td>{bill.due_day}</td>
                   <td>{bill.recurring ? "Recurring" : "One-time"}</td>
                   <td>{formatMoney(bill.amount)}</td>
+                  <td className="actions-column">
+                    <div className="action-group">
+                      <button
+                        className="table-action-button"
+                        type="button"
+                        onClick={() => startEdit(bill)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="table-action-button table-action-button-danger"
+                        type="button"
+                        onClick={() => handleDelete(bill)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

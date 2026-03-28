@@ -50,6 +50,28 @@ def create_income(db: Session, income: schemas.IncomeSourceCreate):
     return record
 
 
+def update_income(db: Session, income_id: int, income: schemas.IncomeSourceUpdate):
+    record = db.get(models.IncomeSource, income_id)
+    if not record:
+        raise LookupError("Income source not found.")
+
+    for field, value in income.model_dump().items():
+        setattr(record, field, value)
+
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def delete_income(db: Session, income_id: int):
+    record = db.get(models.IncomeSource, income_id)
+    if not record:
+        raise LookupError("Income source not found.")
+
+    db.delete(record)
+    db.commit()
+
+
 def list_bills(db: Session):
     return db.scalars(select(models.Bill).order_by(models.Bill.due_day.asc(), models.Bill.name.asc())).all()
 
@@ -60,6 +82,28 @@ def create_bill(db: Session, bill: schemas.BillCreate):
     db.commit()
     db.refresh(record)
     return record
+
+
+def update_bill(db: Session, bill_id: int, bill: schemas.BillUpdate):
+    record = db.get(models.Bill, bill_id)
+    if not record:
+        raise LookupError("Bill not found.")
+
+    for field, value in bill.model_dump().items():
+        setattr(record, field, value)
+
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def delete_bill(db: Session, bill_id: int):
+    record = db.get(models.Bill, bill_id)
+    if not record:
+        raise LookupError("Bill not found.")
+
+    db.delete(record)
+    db.commit()
 
 
 def list_categories(db: Session):
@@ -85,6 +129,45 @@ def create_category(db: Session, category: schemas.AllowanceCategoryCreate):
     db.commit()
     db.refresh(record)
     return record
+
+
+def update_category(db: Session, category_id: int, category: schemas.AllowanceCategoryUpdate):
+    record = db.get(models.AllowanceCategory, category_id)
+    if not record:
+        raise LookupError("Category not found.")
+
+    normalized_name = category.name.strip()
+    existing = db.scalar(
+        select(models.AllowanceCategory).where(
+            func.lower(models.AllowanceCategory.name) == normalized_name.lower(),
+            models.AllowanceCategory.id != category_id,
+        )
+    )
+    if existing:
+        raise ValueError("A category with that name already exists.")
+
+    record.name = normalized_name
+    record.monthly_budget = category.monthly_budget
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def delete_category(db: Session, category_id: int):
+    record = db.get(models.AllowanceCategory, category_id)
+    if not record:
+        raise LookupError("Category not found.")
+
+    linked_transactions = db.scalar(
+        select(func.count(models.Transaction.id)).where(models.Transaction.category_id == category_id)
+    )
+    if linked_transactions:
+        raise ValueError(
+            "You cannot delete a category that still has transactions. Reassign or delete those transactions first."
+        )
+
+    db.delete(record)
+    db.commit()
 
 
 def list_transactions(db: Session, month: str | None = None):
@@ -127,6 +210,40 @@ def create_transaction(db: Session, transaction: schemas.TransactionCreate):
         category_id=record.category_id,
         category_name=category.name,
     )
+
+
+def update_transaction(db: Session, transaction_id: int, transaction: schemas.TransactionUpdate):
+    record = db.get(models.Transaction, transaction_id)
+    if not record:
+        raise LookupError("Transaction not found.")
+
+    category = db.get(models.AllowanceCategory, transaction.category_id)
+    if not category:
+        raise ValueError("Transaction category_id must reference an existing allowance category.")
+
+    for field, value in transaction.model_dump().items():
+        setattr(record, field, value)
+
+    db.commit()
+    db.refresh(record)
+
+    return schemas.TransactionRead(
+        id=record.id,
+        description=record.description,
+        amount=record.amount,
+        date=record.date,
+        category_id=record.category_id,
+        category_name=category.name,
+    )
+
+
+def delete_transaction(db: Session, transaction_id: int):
+    record = db.get(models.Transaction, transaction_id)
+    if not record:
+        raise LookupError("Transaction not found.")
+
+    db.delete(record)
+    db.commit()
 
 
 def calculate_dashboard(db: Session, month: str | None = None):

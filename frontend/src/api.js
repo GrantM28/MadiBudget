@@ -43,11 +43,29 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  updateIncome: (id, payload) =>
+    request(`/incomes/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteIncome: (id) =>
+    request(`/incomes/${id}`, {
+      method: "DELETE",
+    }),
   getBills: () => request("/bills"),
   createBill: (payload) =>
     request("/bills", {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  updateBill: (id, payload) =>
+    request(`/bills/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteBill: (id) =>
+    request(`/bills/${id}`, {
+      method: "DELETE",
     }),
   getCategories: () => request("/categories"),
   createCategory: (payload) =>
@@ -55,10 +73,28 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  updateCategory: (id, payload) =>
+    request(`/categories/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteCategory: (id) =>
+    request(`/categories/${id}`, {
+      method: "DELETE",
+    }),
   getTransactions: (month) => request(`/transactions?month=${encodeURIComponent(month)}`),
   createTransaction: (payload) =>
     request("/transactions", {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  updateTransaction: (id, payload) =>
+    request(`/transactions/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteTransaction: (id) =>
+    request(`/transactions/${id}`, {
+      method: "DELETE",
     }),
 };

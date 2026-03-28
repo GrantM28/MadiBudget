@@ -77,8 +77,28 @@ export default function App() {
     await loadData();
   }
 
+  async function handleUpdateIncome(id, payload) {
+    await api.updateIncome(id, payload);
+    await loadData();
+  }
+
+  async function handleDeleteIncome(id) {
+    await api.deleteIncome(id);
+    await loadData();
+  }
+
   async function handleCreateBill(payload) {
     await api.createBill(payload);
+    await loadData();
+  }
+
+  async function handleUpdateBill(id, payload) {
+    await api.updateBill(id, payload);
+    await loadData();
+  }
+
+  async function handleDeleteBill(id) {
+    await api.deleteBill(id);
     await loadData();
   }
 
@@ -87,8 +107,28 @@ export default function App() {
     await loadData();
   }
 
+  async function handleUpdateCategory(id, payload) {
+    await api.updateCategory(id, payload);
+    await loadData();
+  }
+
+  async function handleDeleteCategory(id) {
+    await api.deleteCategory(id);
+    await loadData();
+  }
+
   async function handleCreateTransaction(payload) {
     await api.createTransaction(payload);
+    await loadData();
+  }
+
+  async function handleUpdateTransaction(id, payload) {
+    await api.updateTransaction(id, payload);
+    await loadData();
+  }
+
+  async function handleDeleteTransaction(id) {
+    await api.deleteTransaction(id);
     await loadData();
   }
 
@@ -161,20 +201,41 @@ export default function App() {
                 categories={categories}
                 onCreate={handleCreateTransaction}
               />
-              <TransactionList transactions={transactions} month={month} />
+              <TransactionList
+                transactions={transactions}
+                categories={categories}
+                month={month}
+                onUpdate={handleUpdateTransaction}
+                onDelete={handleDeleteTransaction}
+              />
             </div>
           ) : null}
 
           {activeView === "bills" ? (
-            <BillList bills={bills} onCreate={handleCreateBill} />
+            <BillList
+              bills={bills}
+              onCreate={handleCreateBill}
+              onUpdate={handleUpdateBill}
+              onDelete={handleDeleteBill}
+            />
           ) : null}
 
           {activeView === "income" ? (
-            <IncomeList incomes={incomes} onCreate={handleCreateIncome} />
+            <IncomeList
+              incomes={incomes}
+              onCreate={handleCreateIncome}
+              onUpdate={handleUpdateIncome}
+              onDelete={handleDeleteIncome}
+            />
           ) : null}
 
           {activeView === "categories" ? (
-            <CategoryList categories={categories} onCreate={handleCreateCategory} />
+            <CategoryList
+              categories={categories}
+              onCreate={handleCreateCategory}
+              onUpdate={handleUpdateCategory}
+              onDelete={handleDeleteCategory}
+            />
           ) : null}
         </section>
       </main>

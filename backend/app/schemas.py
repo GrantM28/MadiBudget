@@ -20,6 +20,10 @@ class IncomeSourceCreate(IncomeSourceBase):
     pass
 
 
+class IncomeSourceUpdate(IncomeSourceBase):
+    pass
+
+
 class IncomeSourceRead(IncomeSourceBase):
     id: int
 
@@ -38,6 +42,10 @@ class BillCreate(BillBase):
     pass
 
 
+class BillUpdate(BillBase):
+    pass
+
+
 class BillRead(BillBase):
     id: int
 
@@ -50,6 +58,10 @@ class AllowanceCategoryBase(BaseModel):
 
 
 class AllowanceCategoryCreate(AllowanceCategoryBase):
+    pass
+
+
+class AllowanceCategoryUpdate(AllowanceCategoryBase):
     pass
 
 
@@ -67,6 +79,10 @@ class TransactionBase(BaseModel):
 
 
 class TransactionCreate(TransactionBase):
+    pass
+
+
+class TransactionUpdate(TransactionBase):
     pass
 
 

@@ -411,6 +411,12 @@ button {
   text-align: right;
 }
 
+.actions-column {
+  width: 180px;
+  min-width: 180px;
+  text-align: left !important;
+}
+
 .row-number-column {
   width: 48px;
   min-width: 48px;
@@ -480,6 +486,19 @@ button {
   grid-template-columns: minmax(220px, 2fr) minmax(120px, 1fr) minmax(120px, 0.7fr) auto;
 }
 
+.sheet-entry-grid-income {
+  grid-template-columns:
+    minmax(220px, 1.7fr)
+    minmax(120px, 0.9fr)
+    minmax(140px, 0.9fr)
+    minmax(140px, 0.9fr)
+    auto;
+}
+
+.sheet-entry-grid-categories {
+  grid-template-columns: minmax(240px, 2fr) minmax(160px, 1fr) auto;
+}
+
 .sheet-entry-grid-transactions {
   grid-template-columns:
     minmax(150px, 0.95fr)
@@ -493,6 +512,16 @@ button {
   display: flex;
   justify-content: flex-end;
   align-items: end;
+}
+
+.action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.action-group-compact {
+  justify-content: flex-end;
 }
 
 .field {
@@ -532,8 +561,53 @@ button {
   cursor: not-allowed;
 }
 
+.button-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.table-action-button {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.table-action-button:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.table-action-button-danger {
+  border-color: rgba(216, 109, 109, 0.35);
+  color: #ffcbcb;
+}
+
+.inline-row-input,
+.inline-row-select {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+
+.inline-row-input-amount {
+  min-width: 110px;
+}
+
 .form-error {
   color: #ffcccc;
+}
+
+.form-error-inline {
+  margin-bottom: 12px;
 }
 
 .item-list {
@@ -636,6 +710,8 @@ button {
 
   .metrics-grid,
   .form-grid,
+  .sheet-entry-grid-income,
+  .sheet-entry-grid-categories,
   .sheet-entry-grid-bills,
   .sheet-entry-grid-transactions {
     grid-template-columns: 1fr;
