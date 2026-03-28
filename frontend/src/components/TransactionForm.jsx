@@ -8,6 +8,7 @@ const initialForm = {
   description: "",
   amount: "",
   date: todayValue(),
+  transaction_type: "expense",
   category_id: "",
 };
 
@@ -102,6 +103,18 @@ export default function TransactionForm({ categories, onCreate }) {
           </div>
 
           <div className="field">
+            <label htmlFor="transaction-type">Direction</label>
+            <select
+              id="transaction-type"
+              value={form.transaction_type}
+              onChange={(event) => setForm({ ...form, transaction_type: event.target.value })}
+            >
+              <option value="expense">Expense</option>
+              <option value="income">Money In / Refund</option>
+            </select>
+          </div>
+
+          <div className="field">
             <label htmlFor="transaction-amount">Amount</label>
             <input
               id="transaction-amount"
@@ -131,6 +144,10 @@ export default function TransactionForm({ categories, onCreate }) {
             Add categories first. Freeform transaction categories are intentionally disabled.
           </p>
         ) : null}
+
+        <p className="helper-text">
+          Use <strong>Money In / Refund</strong> for Amazon refunds, Venmo paybacks, reimbursements, or other money coming back in.
+        </p>
 
         {error ? <div className="form-error">{error}</div> : null}
       </form>

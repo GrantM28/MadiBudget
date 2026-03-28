@@ -2,7 +2,7 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from . import models, schemas
@@ -234,6 +234,7 @@ def list_transactions(db: Session, month: str | None = None):
             description=transaction.description,
             amount=transaction.amount,
             date=transaction.date,
+            transaction_type=transaction.transaction_type,
             category_id=transaction.category_id,
             category_name=category_name,
         )
@@ -256,6 +257,7 @@ def create_transaction(db: Session, transaction: schemas.TransactionCreate):
         description=record.description,
         amount=record.amount,
         date=record.date,
+        transaction_type=record.transaction_type,
         category_id=record.category_id,
         category_name=category.name,
     )
@@ -281,6 +283,7 @@ def update_transaction(db: Session, transaction_id: int, transaction: schemas.Tr
         description=record.description,
         amount=record.amount,
         date=record.date,
+        transaction_type=record.transaction_type,
         category_id=record.category_id,
         category_name=category.name,
     )
@@ -336,7 +339,18 @@ def calculate_dashboard(db: Session, month: str | None = None):
             regular_bills_total += amount
 
     spent_rows = db.execute(
-        select(models.Transaction.category_id, func.coalesce(func.sum(models.Transaction.amount), 0))
+        select(
+            models.Transaction.category_id,
+            func.coalesce(
+                func.sum(
+                    case(
+                        (models.Transaction.transaction_type == "income", -models.Transaction.amount),
+                        else_=models.Transaction.amount,
+                    )
+                ),
+                0,
+            ),
+        )
         .where(models.Transaction.date >= start, models.Transaction.date <= end)
         .group_by(models.Transaction.category_id)
     ).all()

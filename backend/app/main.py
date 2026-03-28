@@ -2,6 +2,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 
 from . import models
 from .db import Base, engine
@@ -41,11 +42,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def _ensure_schema_updates():
+    inspector = inspect(engine)
+
+    if "transactions" in inspector.get_table_names():
+        transaction_columns = {
+            column["name"] for column in inspector.get_columns("transactions")
+        }
+        if "transaction_type" not in transaction_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE transactions "
+                        "ADD COLUMN transaction_type VARCHAR(20) NOT NULL DEFAULT 'expense'"
+                    )
+                )
+
 
 @app.on_event("startup")
 def on_startup():
     models  # Keeps model import explicit for table discovery.
     Base.metadata.create_all(bind=engine)
+    _ensure_schema_updates()
 
 
 @app.get("/health")

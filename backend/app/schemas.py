@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 Frequency = Literal["weekly", "biweekly", "monthly"]
 BillType = Literal["bill", "chapter13"]
+TransactionDirection = Literal["expense", "income"]
 
 
 class IncomeSourceBase(BaseModel):
@@ -95,6 +96,7 @@ class TransactionBase(BaseModel):
     description: str = Field(..., min_length=1, max_length=255)
     amount: Decimal = Field(..., gt=0)
     date: date
+    transaction_type: TransactionDirection = "expense"
     category_id: int
 
 

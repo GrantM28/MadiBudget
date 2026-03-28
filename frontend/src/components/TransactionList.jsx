@@ -9,6 +9,11 @@ function formatMoney(value) {
   return currency.format(Number(value || 0));
 }
 
+function formatSignedMoney(amount, transactionType) {
+  const sign = transactionType === "income" ? "+" : "-";
+  return `${sign}${formatMoney(amount)}`;
+}
+
 export default function TransactionList({
   transactions,
   categories,
@@ -27,6 +32,7 @@ export default function TransactionList({
       description: transaction.description,
       amount: String(transaction.amount),
       date: transaction.date,
+      transaction_type: transaction.transaction_type,
       category_id: String(transaction.category_id),
     });
     setError("");
@@ -103,6 +109,7 @@ export default function TransactionList({
                 <th>Date</th>
                 <th>Description</th>
                 <th>Category</th>
+                <th>Type</th>
                 <th>Amount</th>
                 <th className="actions-column">Actions</th>
               </tr>
@@ -162,6 +169,24 @@ export default function TransactionList({
                     </td>
                     <td>
                       {isEditing ? (
+                        <select
+                          className="inline-row-select"
+                          value={editForm.transaction_type}
+                          onChange={(event) =>
+                            setEditForm({ ...editForm, transaction_type: event.target.value })
+                          }
+                        >
+                          <option value="expense">Expense</option>
+                          <option value="income">Money In / Refund</option>
+                        </select>
+                      ) : transaction.transaction_type === "income" ? (
+                        "Money In"
+                      ) : (
+                        "Expense"
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
                         <input
                           className="inline-row-input inline-row-input-amount"
                           type="number"
@@ -173,7 +198,15 @@ export default function TransactionList({
                           }
                         />
                       ) : (
-                        formatMoney(transaction.amount)
+                        <span
+                          className={
+                            transaction.transaction_type === "income"
+                              ? "transaction-amount-positive"
+                              : "transaction-amount-negative"
+                          }
+                        >
+                          {formatSignedMoney(transaction.amount, transaction.transaction_type)}
+                        </span>
                       )}
                     </td>
                     <td className="actions-column">

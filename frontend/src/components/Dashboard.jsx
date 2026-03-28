@@ -71,11 +71,11 @@ export default function Dashboard({ dashboard, plan, month }) {
         </article>
 
         <article className="metric-card">
-          <div className="metric-label">Spent This Month</div>
+          <div className="metric-label">Net Category Spend</div>
           <div className="metric-value">
             {formatMoney(dashboard.total_spent_in_allowance_categories)}
           </div>
-          <div className="metric-note">Actual transactions assigned to categories.</div>
+          <div className="metric-note">Expenses minus refunds or other money back into categories.</div>
         </article>
 
         <article className="metric-card">

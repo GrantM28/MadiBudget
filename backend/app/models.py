@@ -51,6 +51,7 @@ class Transaction(Base):
     description = Column(String(255), nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
     date = Column(Date, nullable=False)
+    transaction_type = Column(String(20), nullable=False, default="expense", server_default="expense")
     category_id = Column(Integer, ForeignKey("allowance_categories.id"), nullable=False)
 
     category = relationship("AllowanceCategory", back_populates="transactions")

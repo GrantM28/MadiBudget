@@ -6,6 +6,7 @@ import BillList from "./components/BillList";
 import CategoryList from "./components/CategoryList";
 import TransactionForm from "./components/TransactionForm";
 import TransactionList from "./components/TransactionList";
+import Visualize from "./components/Visualize";
 
 function currentMonthValue() {
   const now = new Date();
@@ -20,6 +21,7 @@ const navItems = [
   { id: "bills", label: "Bills" },
   { id: "income", label: "Income" },
   { id: "categories", label: "Categories" },
+  { id: "visualize", label: "Visualize" },
 ];
 
 export default function App() {
@@ -260,6 +262,14 @@ export default function App() {
               onCreate={handleCreateCategory}
               onUpdate={handleUpdateCategory}
               onDelete={handleDeleteCategory}
+            />
+          ) : null}
+
+          {activeView === "visualize" ? (
+            <Visualize
+              transactions={transactions}
+              categories={categories}
+              month={month}
             />
           ) : null}
         </section>
