@@ -311,6 +311,13 @@ button {
   gap: 10px;
 }
 
+.selected-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .filter-chip {
   min-height: 36px;
   padding: 0 12px;
@@ -325,6 +332,105 @@ button {
   background: rgba(94, 162, 255, 0.16);
   border-color: rgba(94, 162, 255, 0.32);
   color: var(--text);
+}
+
+.multi-select {
+  position: relative;
+}
+
+.multi-select-trigger {
+  width: 100%;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+  text-align: left;
+}
+
+.multi-select-trigger.open {
+  border-color: rgba(94, 162, 255, 0.4);
+  box-shadow: 0 0 0 1px rgba(94, 162, 255, 0.18);
+}
+
+.multi-select-trigger-text {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.multi-select-title {
+  font-weight: 700;
+}
+
+.multi-select-subtitle {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.multi-select-caret {
+  flex-shrink: 0;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.multi-select-menu {
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(94, 162, 255, 0.06), transparent 24%), var(--bg-table);
+  box-shadow: var(--shadow);
+}
+
+.multi-select-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.multi-select-results {
+  max-height: 300px;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 6px;
+}
+
+.multi-select-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+}
+
+.multi-select-option input {
+  width: 16px;
+  height: 16px;
+  accent-color: #5ea2ff;
+}
+
+.multi-select-empty,
+.visualize-filter-note {
+  color: var(--text-muted);
+  line-height: 1.55;
 }
 
 .visualize-hero {

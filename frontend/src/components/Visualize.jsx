@@ -194,6 +194,7 @@ export default function Visualize({ transactions, month, categories }) {
   const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
   const [search, setSearch] = useState("");
   const [topN, setTopN] = useState("8");
+  const [namesDropdownOpen, setNamesDropdownOpen] = useState(false);
 
   const descriptionOptions = useMemo(() => {
     const uniqueDescriptions = [...new Set(transactions.map((transaction) => transaction.description.trim()))];
@@ -213,6 +214,7 @@ export default function Visualize({ transactions, month, categories }) {
 
   const selectedCategoriesSet = new Set(selectedCategoryIds.map(String));
   const selectedDescriptionsSet = new Set(selectedDescriptions);
+  const selectedDescriptionPreview = selectedDescriptions.slice(0, 3);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((transaction) => {
@@ -318,6 +320,17 @@ export default function Visualize({ transactions, month, categories }) {
     setSearch("");
   }
 
+  function selectAllVisibleDescriptions() {
+    setSelectedDescriptions((current) => {
+      const merged = new Set([...current, ...filteredDescriptionOptions]);
+      return [...merged].sort((a, b) => a.localeCompare(b));
+    });
+  }
+
+  function clearDescriptionFilter() {
+    setSelectedDescriptions([]);
+  }
+
   return (
     <section className="visualize-layout">
       <aside className="visualize-builder">
@@ -420,27 +433,97 @@ export default function Visualize({ transactions, month, categories }) {
           </div>
 
           <div className="field">
-            <label htmlFor="visual-search">Search Names</label>
-            <input
-              id="visual-search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search transaction names"
-            />
+            <label>Pick Transaction Names</label>
+            <div className="multi-select">
+              <button
+                type="button"
+                className={`multi-select-trigger ${namesDropdownOpen ? "open" : ""}`}
+                onClick={() => setNamesDropdownOpen((current) => !current)}
+              >
+                <div className="multi-select-trigger-text">
+                  <span className="multi-select-title">
+                    {selectedDescriptions.length === 0
+                      ? "All transaction names"
+                      : `${selectedDescriptions.length} selected`}
+                  </span>
+                  <span className="multi-select-subtitle">
+                    {selectedDescriptions.length === 0
+                      ? `Showing all ${descriptionOptions.length} names`
+                      : selectedDescriptionPreview.join(", ")}
+                    {selectedDescriptions.length > 3 ? "..." : ""}
+                  </span>
+                </div>
+                <span className="multi-select-caret">{namesDropdownOpen ? "Hide" : "Browse"}</span>
+              </button>
+
+              {namesDropdownOpen ? (
+                <div className="multi-select-menu">
+                  <div className="field">
+                    <label htmlFor="visual-search">Search Names</label>
+                    <input
+                      id="visual-search"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Search transaction names"
+                    />
+                  </div>
+
+                  <div className="multi-select-toolbar">
+                    <button
+                      type="button"
+                      className="table-action-button"
+                      onClick={selectAllVisibleDescriptions}
+                    >
+                      Select Visible
+                    </button>
+                    <button
+                      type="button"
+                      className="table-action-button"
+                      onClick={clearDescriptionFilter}
+                    >
+                      Clear Names
+                    </button>
+                  </div>
+
+                  <div className="multi-select-results">
+                    {filteredDescriptionOptions.length === 0 ? (
+                      <div className="multi-select-empty">No transaction names match your search.</div>
+                    ) : (
+                      filteredDescriptionOptions.map((description) => (
+                        <label key={description} className="multi-select-option">
+                          <input
+                            type="checkbox"
+                            checked={selectedDescriptionsSet.has(description)}
+                            onChange={() => toggleDescription(description)}
+                          />
+                          <span>{description}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
 
-          <div className="filter-chip-grid">
-            {filteredDescriptionOptions.slice(0, 28).map((description) => (
-              <button
-                key={description}
-                type="button"
-                className={`filter-chip ${selectedDescriptionsSet.has(description) ? "active" : ""}`}
-                onClick={() => toggleDescription(description)}
-              >
-                {description}
-              </button>
-            ))}
-          </div>
+          {selectedDescriptions.length > 0 ? (
+            <div className="selected-chip-grid">
+              {selectedDescriptions.map((description) => (
+                <button
+                  key={description}
+                  type="button"
+                  className="filter-chip active"
+                  onClick={() => toggleDescription(description)}
+                >
+                  {description}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="visualize-filter-note">
+              No specific names selected, so the chart includes every transaction name.
+            </div>
+          )}
         </div>
 
         <div className="visualize-panel">
