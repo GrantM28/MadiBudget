@@ -56,6 +56,8 @@ async function request(path, options = {}) {
     ...options,
   });
 
+  const contentType = response.headers.get("content-type") || "";
+
   if (!response.ok) {
     let message = "Request failed.";
 
@@ -78,6 +80,18 @@ async function request(path, options = {}) {
 
   if (response.status === 204) {
     return null;
+  }
+
+  if (!contentType.toLowerCase().includes("application/json")) {
+    const body = await response.text();
+    const looksLikeHtml = /^\s*</.test(body);
+    if (looksLikeHtml) {
+      throw new Error(
+        "The request hit the frontend instead of the backend API. Check VITE_API_URL or your reverse proxy routing.",
+      );
+    }
+
+    throw new Error("The server returned an unexpected response instead of JSON.");
   }
 
   return response.json();

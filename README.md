@@ -234,6 +234,37 @@ Optional month filters:
 - LAN IP access like `http://192.168.x.x:3040` is allowed by default for self-hosted local-network use.
 - If you deploy behind `https://budget.gmadi.me`, add that origin to `CORS_ORIGINS` if the browser is calling the API across origins.
 
+## Reverse Proxy Notes
+
+If you serve MadiBudget at `https://budget.gmadi.me`, the browser must still be able to reach the FastAPI backend.
+
+Two workable patterns:
+
+1. Same-origin API routing
+
+- Serve the frontend at `/`
+- Route these backend paths to FastAPI instead of the frontend:
+  - `/auth`
+  - `/dashboard`
+  - `/plan`
+  - `/cash-position`
+  - `/incomes`
+  - `/income-adjustments`
+  - `/bills`
+  - `/categories`
+  - `/transactions`
+  - `/docs`
+  - `/openapi.json`
+  - `/health`
+- In this setup, leave `VITE_API_URL` blank.
+
+2. API subpath routing
+
+- Route `/api/*` to FastAPI and strip the `/api` prefix before forwarding.
+- Set `VITE_API_URL=/api`
+
+If the frontend receives HTML when it expects JSON, it usually means the reverse proxy sent an API request to the frontend container instead of the backend.
+
 ## Likely Issues To Watch For
 
 - If PostgreSQL is not running or `DATABASE_URL` is wrong, the backend will not start.
