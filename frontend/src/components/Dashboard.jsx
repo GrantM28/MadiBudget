@@ -7,6 +7,10 @@ function formatMoney(value) {
   return currency.format(Number(value || 0));
 }
 
+function formatPercent(value) {
+  return `${Number.isFinite(value) ? value.toFixed(0) : "0"}%`;
+}
+
 export default function Dashboard({ dashboard, plan, month }) {
   if (!dashboard || !plan) {
     return null;
@@ -16,11 +20,14 @@ export default function Dashboard({ dashboard, plan, month }) {
   const plannedCushion = Number(dashboard.safe_to_spend_after_budgeted_categories);
   const overBudgetTotal = Number(dashboard.over_budget_total);
   const categoriesOverBudget = dashboard.categories_over_budget_count;
+  const totalAllowances = Number(dashboard.total_allowances);
+  const totalSpent = Number(dashboard.total_spent_in_allowance_categories);
+  const budgetUsagePercent =
+    totalAllowances > 0 ? Math.max(0, (totalSpent / totalAllowances) * 100) : 0;
 
   let statusLabel = "On track";
   let statusClass = "safe-positive";
-  let statusMessage =
-    "Current spending is still inside the monthly category plan.";
+  let statusMessage = "Current spending is still inside the monthly category plan.";
 
   if (availableNow < 0) {
     statusLabel = "Over budget now";
@@ -53,6 +60,25 @@ export default function Dashboard({ dashboard, plan, month }) {
     return aRemaining - bRemaining;
   });
 
+  const overspentCategories = categoryRows
+    .filter((category) => Number(category.remaining) < 0)
+    .sort((a, b) => Number(a.remaining) - Number(b.remaining));
+
+  const watchCategories = categoryRows
+    .filter((category) => {
+      const budget = Number(category.budget);
+      const spent = Number(category.spent);
+      const remaining = Number(category.remaining);
+      return budget > 0 && remaining >= 0 && spent / budget >= 0.85;
+    })
+    .sort((a, b) => Number(b.spent) / Number(b.budget) - Number(a.spent) / Number(a.budget));
+
+  const biggestOverrun = overspentCategories[0] || null;
+  const topSpendCategory =
+    [...categoryRows].sort((a, b) => Number(b.spent) - Number(a.spent))[0] || null;
+  const budgetUsageClass =
+    budgetUsagePercent > 100 ? "progress-fill-danger" : budgetUsagePercent >= 85 ? "progress-fill-warning" : "progress-fill-safe";
+
   return (
     <section className="dashboard">
       <div className="dashboard-header">
@@ -60,8 +86,8 @@ export default function Dashboard({ dashboard, plan, month }) {
           <p className="section-kicker">Overview</p>
           <h2 className="dashboard-title">Budget snapshot for {month}</h2>
           <p className="section-subtitle">
-            The dashboard now separates planning cushion from what is actually safe to
-            spend after current category overspending.
+            The dashboard now separates planning cushion from what is actually safe to spend after
+            current category overspending.
           </p>
         </div>
 
@@ -85,6 +111,95 @@ export default function Dashboard({ dashboard, plan, month }) {
             <strong>{formatMoney(dashboard.over_budget_total)}</strong>
           </p>
         </div>
+      </section>
+
+      <section className="dashboard-priority-grid">
+        <article className="section-card dashboard-priority-card">
+          <div className="section-title-row">
+            <div>
+              <h2>Budget Usage</h2>
+              <p className="section-subtitle">
+                How much of the total category plan is already gone this month.
+              </p>
+            </div>
+          </div>
+
+          <div className="progress-metric-head">
+            <strong>{formatMoney(dashboard.total_spent_in_allowance_categories)}</strong>
+            <span>{formatPercent(budgetUsagePercent)} used</span>
+          </div>
+          <div className="progress-track">
+            <div
+              className={`progress-fill ${budgetUsageClass}`}
+              style={{ width: `${Math.min(budgetUsagePercent, 100)}%` }}
+            />
+          </div>
+          <p className="helper-text dashboard-inline-note">
+            Budgeted categories total {formatMoney(dashboard.total_allowances)} for the month.
+          </p>
+        </article>
+
+        <article className="section-card dashboard-priority-card">
+          <div className="section-title-row">
+            <div>
+              <h2>Biggest Problem</h2>
+              <p className="section-subtitle">
+                The category currently doing the most damage.
+              </p>
+            </div>
+          </div>
+
+          {biggestOverrun ? (
+            <div className="priority-callout priority-callout-danger">
+              <strong>{biggestOverrun.category_name}</strong>
+              <span>Over by {formatMoney(Math.abs(Number(biggestOverrun.remaining)))}</span>
+            </div>
+          ) : (
+            <div className="priority-callout">
+              <strong>No category is over budget right now.</strong>
+              <span>The current month is still inside category limits.</span>
+            </div>
+          )}
+
+          {topSpendCategory ? (
+            <p className="helper-text dashboard-inline-note">
+              Largest total spend so far: <strong>{topSpendCategory.category_name}</strong> at{" "}
+              <strong>{formatMoney(topSpendCategory.spent)}</strong>.
+            </p>
+          ) : null}
+        </article>
+
+        <article className="section-card dashboard-priority-card">
+          <div className="section-title-row">
+            <div>
+              <h2>Watch List</h2>
+              <p className="section-subtitle">
+                Categories that are almost out of room even if they are not over yet.
+              </p>
+            </div>
+          </div>
+
+          {watchCategories.length > 0 ? (
+            <div className="insight-list">
+              {watchCategories.slice(0, 3).map((category) => (
+                <div key={category.category_id} className="insight-list-row">
+                  <div>
+                    <strong>{category.category_name}</strong>
+                    <span>
+                      {formatMoney(category.remaining)} left of {formatMoney(category.budget)}
+                    </span>
+                  </div>
+                  <strong>{formatPercent((Number(category.spent) / Number(category.budget)) * 100)}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="priority-callout">
+              <strong>No categories on the edge.</strong>
+              <span>Nothing is sitting at 85% or more of budget right now.</span>
+            </div>
+          )}
+        </article>
       </section>
 
       <div className="metrics-grid metrics-grid-dashboard">
@@ -208,7 +323,7 @@ export default function Dashboard({ dashboard, plan, month }) {
           )}
         </article>
 
-        <aside className="section-card">
+        <aside className="section-card dashboard-side-stack">
           <div className="section-title-row">
             <div>
               <h2>Reality Check</h2>
@@ -249,6 +364,33 @@ export default function Dashboard({ dashboard, plan, month }) {
               <strong>{formatMoney(plan.available_to_spend_right_now)}</strong>
             </div>
           </div>
+
+          <div className="section-divider" />
+
+          <div className="section-title-row section-title-row-tight">
+            <div>
+              <h2>Immediate Attention</h2>
+              <p className="section-subtitle">
+                The worst over-budget categories right now.
+              </p>
+            </div>
+          </div>
+
+          {overspentCategories.length > 0 ? (
+            <div className="insight-list">
+              {overspentCategories.slice(0, 4).map((category) => (
+                <div key={category.category_id} className="insight-list-row insight-list-row-danger">
+                  <div>
+                    <strong>{category.category_name}</strong>
+                    <span>Spent {formatMoney(category.spent)} against {formatMoney(category.budget)}</span>
+                  </div>
+                  <strong>{formatMoney(Math.abs(Number(category.remaining)))}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="empty-state">Nothing is currently over budget.</p>
+          )}
         </aside>
       </div>
     </section>

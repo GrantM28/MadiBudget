@@ -616,6 +616,17 @@ button {
   gap: 18px;
 }
 
+.dashboard-priority-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.dashboard-priority-card {
+  display: grid;
+  gap: 14px;
+}
+
 .dashboard-alert {
   display: grid;
   grid-template-columns: minmax(240px, 0.7fr) minmax(0, 1fr);
@@ -724,6 +735,15 @@ button {
   gap: 18px;
 }
 
+.dashboard-side-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.dashboard-inline-note {
+  margin: 0;
+}
+
 .section-card {
   padding: 18px;
   border-radius: 18px;
@@ -759,6 +779,15 @@ button {
   text-align: center;
   font-size: 0.82rem;
   font-weight: 700;
+}
+
+.section-divider {
+  height: 1px;
+  background: var(--border-soft);
+}
+
+.section-title-row-tight {
+  margin-bottom: 0;
 }
 
 .budget-table-wrap {
@@ -899,6 +928,21 @@ button {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent);
 }
 
+.register-toolbar {
+  margin-top: 0;
+}
+
+.register-toolbar-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(170px, 0.9fr) minmax(200px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.register-toolbar-grid-bills {
+  grid-template-columns: minmax(240px, 1fr) auto;
+}
+
 .sheet-entry-grid {
   display: grid;
   gap: 12px;
@@ -962,6 +1006,96 @@ button {
   color: var(--text-muted);
   font-size: 0.9rem;
   font-weight: 500;
+}
+
+.progress-metric-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.progress-metric-head strong {
+  font-size: 1.25rem;
+}
+
+.progress-metric-head span {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.progress-track {
+  height: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+}
+
+.progress-fill-safe {
+  background: linear-gradient(90deg, #3f7fd2, #5cc58e);
+}
+
+.progress-fill-warning {
+  background: linear-gradient(90deg, #3f7fd2, #d9a95a);
+}
+
+.progress-fill-danger {
+  background: linear-gradient(90deg, #d9a95a, #d86d6d);
+}
+
+.priority-callout {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-table);
+}
+
+.priority-callout span {
+  color: var(--text-muted);
+}
+
+.priority-callout-danger {
+  border-color: rgba(216, 109, 109, 0.28);
+  background: linear-gradient(135deg, rgba(216, 109, 109, 0.11), rgba(216, 109, 109, 0.03));
+}
+
+.insight-list {
+  display: grid;
+  gap: 10px;
+}
+
+.insight-list-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-table);
+}
+
+.insight-list-row > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.insight-list-row span {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.insight-list-row-danger {
+  border-color: rgba(216, 109, 109, 0.24);
+  background: linear-gradient(135deg, rgba(216, 109, 109, 0.08), rgba(216, 109, 109, 0.02));
 }
 
 .form-grid {
@@ -1099,6 +1233,10 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .dashboard-priority-grid {
+    grid-template-columns: 1fr;
+  }
+
   .dashboard-lower {
     grid-template-columns: 1fr;
   }
@@ -1162,6 +1300,8 @@ button {
   .metrics-grid,
   .visualize-summary-grid,
   .form-grid,
+  .register-toolbar-grid,
+  .register-toolbar-grid-bills,
   .sheet-entry-grid-income,
   .sheet-entry-grid-categories,
   .sheet-entry-grid-bills,

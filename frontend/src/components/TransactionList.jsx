@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -23,8 +23,45 @@ export default function TransactionList({
 }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  const filteredTransactions = useMemo(() => {
+    const search = searchQuery.trim().toLowerCase();
+
+    return transactions.filter((transaction) => {
+      const matchesSearch =
+        !search ||
+        transaction.description.toLowerCase().includes(search) ||
+        transaction.category_name.toLowerCase().includes(search);
+      const matchesType = typeFilter === "all" || transaction.transaction_type === typeFilter;
+      const matchesCategory =
+        categoryFilter === "all" || String(transaction.category_id) === categoryFilter;
+
+      return matchesSearch && matchesType && matchesCategory;
+    });
+  }, [transactions, searchQuery, typeFilter, categoryFilter]);
+
+  const transactionTotals = useMemo(() => {
+    return filteredTransactions.reduce(
+      (totals, transaction) => {
+        const amount = Number(transaction.amount || 0);
+
+        if (transaction.transaction_type === "income") {
+          totals.moneyIn += amount;
+        } else {
+          totals.spent += amount;
+        }
+
+        totals.net = totals.moneyIn - totals.spent;
+        return totals;
+      },
+      { spent: 0, moneyIn: 0, net: 0 },
+    );
+  }, [filteredTransactions]);
 
   function startEdit(transaction) {
     setEditingId(transaction.id);
@@ -42,6 +79,12 @@ export default function TransactionList({
     setEditingId(null);
     setEditForm(null);
     setError("");
+  }
+
+  function clearFilters() {
+    setSearchQuery("");
+    setTypeFilter("all");
+    setCategoryFilter("all");
   }
 
   async function handleSave(transactionId) {
@@ -90,16 +133,93 @@ export default function TransactionList({
         <div>
           <h2>Transaction Register</h2>
           <p className="section-subtitle">
-            Worksheet view of all spending recorded for {month}, with inline editing.
+            Worksheet view of all spending recorded for {month}, with search, filters, and inline editing.
           </p>
         </div>
-        <span className="section-count">{transactions.length}</span>
+        <span className="section-count">
+          {filteredTransactions.length}
+          {filteredTransactions.length !== transactions.length ? ` / ${transactions.length}` : ""}
+        </span>
+      </div>
+
+      <div className="summary-stack summary-stack-income">
+        <div className="summary-tile">
+          <span className="summary-list-label">Filtered Spend</span>
+          <strong>{formatMoney(transactionTotals.spent)}</strong>
+        </div>
+
+        <div className="summary-tile summary-tile-safe">
+          <span className="summary-list-label">Filtered Money In</span>
+          <strong>{formatMoney(transactionTotals.moneyIn)}</strong>
+        </div>
+
+        <div
+          className={`summary-tile ${
+            transactionTotals.net < 0 ? "summary-tile-warning" : ""
+          }`}
+        >
+          <span className="summary-list-label">Filtered Net Flow</span>
+          <strong>{formatMoney(transactionTotals.net)}</strong>
+        </div>
+      </div>
+
+      <div className="sheet-entry-form register-toolbar">
+        <div className="register-toolbar-grid">
+          <div className="field">
+            <label htmlFor="transaction-search">Search</label>
+            <input
+              id="transaction-search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search merchant or category"
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="transaction-type-filter">Type</label>
+            <select
+              id="transaction-type-filter"
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value)}
+            >
+              <option value="all">All types</option>
+              <option value="expense">Expenses</option>
+              <option value="income">Money In / Refunds</option>
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="transaction-category-filter">Category</label>
+            <select
+              id="transaction-category-filter"
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+            >
+              <option value="all">All categories</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="sheet-entry-actions">
+            <div className="action-group action-group-compact">
+              <button className="button button-secondary" type="button" onClick={clearFilters}>
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {error ? <div className="form-error form-error-inline">{error}</div> : null}
 
       {transactions.length === 0 ? (
         <p className="empty-state">No transactions recorded for this month yet.</p>
+      ) : filteredTransactions.length === 0 ? (
+        <p className="empty-state">No transactions match the current filters.</p>
       ) : (
         <div className="budget-table-wrap ledger-table-wrap">
           <table className="transaction-table ledger-table">
@@ -115,7 +235,7 @@ export default function TransactionList({
               </tr>
             </thead>
             <tbody>
-              {transactions.map((transaction, index) => {
+              {filteredTransactions.map((transaction, index) => {
                 const isEditing = editingId === transaction.id;
 
                 return (

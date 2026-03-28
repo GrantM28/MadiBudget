@@ -17,6 +17,7 @@ const initialForm = {
 
 export default function BillList({ bills, onCreate, onUpdate, onDelete }) {
   const [form, setForm] = useState(initialForm);
+  const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -25,6 +26,24 @@ export default function BillList({ bills, onCreate, onUpdate, onDelete }) {
     () => [...bills].sort((a, b) => a.due_day - b.due_day || a.name.localeCompare(b.name)),
     [bills],
   );
+
+  const filteredBills = useMemo(() => {
+    const search = searchQuery.trim().toLowerCase();
+    if (!search) {
+      return sortedBills;
+    }
+
+    return sortedBills.filter((bill) => bill.name.toLowerCase().includes(search));
+  }, [sortedBills, searchQuery]);
+
+  const billSummary = useMemo(() => {
+    const total = sortedBills.reduce((sum, bill) => sum + Number(bill.amount || 0), 0);
+    const earlyMonthCount = sortedBills.filter((bill) => Number(bill.due_day) <= 10).length;
+    const largestBill =
+      [...sortedBills].sort((a, b) => Number(b.amount) - Number(a.amount))[0] || null;
+
+    return { total, earlyMonthCount, largestBill };
+  }, [sortedBills]);
 
   function resetForm() {
     setForm(initialForm);
@@ -95,7 +114,31 @@ export default function BillList({ bills, onCreate, onUpdate, onDelete }) {
             Enter, edit, and organize recurring monthly bills in a worksheet-style schedule.
           </p>
         </div>
-        <span className="section-count">{bills.length}</span>
+        <span className="section-count">
+          {filteredBills.length}
+          {filteredBills.length !== bills.length ? ` / ${bills.length}` : ""}
+        </span>
+      </div>
+
+      <div className="summary-stack summary-stack-income">
+        <div className="summary-tile">
+          <span className="summary-list-label">Monthly Bill Load</span>
+          <strong>{formatMoney(billSummary.total)}</strong>
+        </div>
+
+        <div className="summary-tile summary-tile-warning">
+          <span className="summary-list-label">Due In Days 1-10</span>
+          <strong>{billSummary.earlyMonthCount}</strong>
+        </div>
+
+        <div className="summary-tile">
+          <span className="summary-list-label">Largest Bill</span>
+          <strong>
+            {billSummary.largestBill
+              ? `${billSummary.largestBill.name} - ${formatMoney(billSummary.largestBill.amount)}`
+              : "None"}
+          </strong>
+        </div>
       </div>
 
       <form className="sheet-entry-form" onSubmit={handleSubmit}>
@@ -145,11 +188,7 @@ export default function BillList({ bills, onCreate, onUpdate, onDelete }) {
                 {submitting ? "Saving..." : editingId ? "Save Changes" : "Add Bill"}
               </button>
               {editingId ? (
-                <button
-                  className="button button-secondary"
-                  type="button"
-                  onClick={resetForm}
-                >
+                <button className="button button-secondary" type="button" onClick={resetForm}>
                   Cancel
                 </button>
               ) : null}
@@ -160,8 +199,36 @@ export default function BillList({ bills, onCreate, onUpdate, onDelete }) {
         {error ? <div className="form-error">{error}</div> : null}
       </form>
 
+      <div className="sheet-entry-form register-toolbar">
+        <div className="register-toolbar-grid register-toolbar-grid-bills">
+          <div className="field">
+            <label htmlFor="bill-search">Search Bills</label>
+            <input
+              id="bill-search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search by bill name"
+            />
+          </div>
+
+          <div className="sheet-entry-actions">
+            <div className="action-group action-group-compact">
+              <button
+                className="button button-secondary"
+                type="button"
+                onClick={() => setSearchQuery("")}
+              >
+                Clear Search
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {sortedBills.length === 0 ? (
         <p className="empty-state">No bills added yet.</p>
+      ) : filteredBills.length === 0 ? (
+        <p className="empty-state">No bills match the current search.</p>
       ) : (
         <div className="budget-table-wrap ledger-table-wrap">
           <table className="transaction-table ledger-table">
@@ -176,7 +243,7 @@ export default function BillList({ bills, onCreate, onUpdate, onDelete }) {
               </tr>
             </thead>
             <tbody>
-              {sortedBills.map((bill, index) => (
+              {filteredBills.map((bill, index) => (
                 <tr key={bill.id}>
                   <td className="row-number-column">{index + 1}</td>
                   <td className="budget-table-category">{bill.name}</td>

@@ -16,6 +16,7 @@ const initialForm = {
 
 export default function CategoryList({ categories, onCreate, onUpdate, onDelete }) {
   const [form, setForm] = useState(initialForm);
+  const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -24,6 +25,29 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
     () => [...categories].sort((a, b) => a.name.localeCompare(b.name)),
     [categories],
   );
+
+  const filteredCategories = useMemo(() => {
+    const search = searchQuery.trim().toLowerCase();
+    if (!search) {
+      return sortedCategories;
+    }
+
+    return sortedCategories.filter((category) => category.name.toLowerCase().includes(search));
+  }, [sortedCategories, searchQuery]);
+
+  const categorySummary = useMemo(() => {
+    const totalBudget = sortedCategories.reduce(
+      (sum, category) => sum + Number(category.monthly_budget || 0),
+      0,
+    );
+    const largestCategory =
+      [...sortedCategories].sort(
+        (a, b) => Number(b.monthly_budget) - Number(a.monthly_budget),
+      )[0] || null;
+    const averageBudget = sortedCategories.length ? totalBudget / sortedCategories.length : 0;
+
+    return { totalBudget, largestCategory, averageBudget };
+  }, [sortedCategories]);
 
   function resetForm() {
     setForm(initialForm);
@@ -90,7 +114,31 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
             Manage the budget categories that every transaction must use.
           </p>
         </div>
-        <span className="section-count">{categories.length}</span>
+        <span className="section-count">
+          {filteredCategories.length}
+          {filteredCategories.length !== categories.length ? ` / ${categories.length}` : ""}
+        </span>
+      </div>
+
+      <div className="summary-stack summary-stack-income">
+        <div className="summary-tile">
+          <span className="summary-list-label">Total Budgeted</span>
+          <strong>{formatMoney(categorySummary.totalBudget)}</strong>
+        </div>
+
+        <div className="summary-tile">
+          <span className="summary-list-label">Average Category</span>
+          <strong>{formatMoney(categorySummary.averageBudget)}</strong>
+        </div>
+
+        <div className="summary-tile summary-tile-safe">
+          <span className="summary-list-label">Largest Category</span>
+          <strong>
+            {categorySummary.largestCategory
+              ? `${categorySummary.largestCategory.name} - ${formatMoney(categorySummary.largestCategory.monthly_budget)}`
+              : "None"}
+          </strong>
+        </div>
       </div>
 
       <form className="sheet-entry-form" onSubmit={handleSubmit}>
@@ -126,11 +174,7 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
                 {submitting ? "Saving..." : editingId ? "Save Changes" : "Add Category"}
               </button>
               {editingId ? (
-                <button
-                  className="button button-secondary"
-                  type="button"
-                  onClick={resetForm}
-                >
+                <button className="button button-secondary" type="button" onClick={resetForm}>
                   Cancel
                 </button>
               ) : null}
@@ -141,8 +185,36 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
         {error ? <div className="form-error">{error}</div> : null}
       </form>
 
+      <div className="sheet-entry-form register-toolbar">
+        <div className="register-toolbar-grid register-toolbar-grid-bills">
+          <div className="field">
+            <label htmlFor="category-search">Search Categories</label>
+            <input
+              id="category-search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search category names"
+            />
+          </div>
+
+          <div className="sheet-entry-actions">
+            <div className="action-group action-group-compact">
+              <button
+                className="button button-secondary"
+                type="button"
+                onClick={() => setSearchQuery("")}
+              >
+                Clear Search
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {sortedCategories.length === 0 ? (
         <p className="empty-state">No allowance categories added yet.</p>
+      ) : filteredCategories.length === 0 ? (
+        <p className="empty-state">No categories match the current search.</p>
       ) : (
         <div className="budget-table-wrap ledger-table-wrap">
           <table className="transaction-table ledger-table">
@@ -155,7 +227,7 @@ export default function CategoryList({ categories, onCreate, onUpdate, onDelete 
               </tr>
             </thead>
             <tbody>
-              {sortedCategories.map((category, index) => (
+              {filteredCategories.map((category, index) => (
                 <tr key={category.id}>
                   <td className="row-number-column">{index + 1}</td>
                   <td className="budget-table-category">{category.name}</td>
