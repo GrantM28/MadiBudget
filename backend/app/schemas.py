@@ -30,6 +30,26 @@ class IncomeSourceRead(IncomeSourceBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class VariableIncomeBase(BaseModel):
+    description: str = Field(..., min_length=1, max_length=255)
+    amount: Decimal = Field(..., gt=0)
+    date: date
+
+
+class VariableIncomeCreate(VariableIncomeBase):
+    pass
+
+
+class VariableIncomeUpdate(VariableIncomeBase):
+    pass
+
+
+class VariableIncomeRead(VariableIncomeBase):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class BillBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     amount: Decimal = Field(..., gt=0)
@@ -103,6 +123,8 @@ class CategorySummary(BaseModel):
 
 class DashboardResponse(BaseModel):
     month: str
+    recurring_monthly_income: Decimal
+    variable_income_total: Decimal
     monthly_income: Decimal
     total_bills: Decimal
     chapter13_payment_total: Decimal
@@ -115,6 +137,8 @@ class DashboardResponse(BaseModel):
 
 class PlanResponse(BaseModel):
     month: str
+    recurring_monthly_income: Decimal
+    variable_income_total: Decimal
     monthly_income: Decimal
     total_bills: Decimal
     total_allowances: Decimal

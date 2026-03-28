@@ -72,6 +72,55 @@ def delete_income(db: Session, income_id: int):
     db.commit()
 
 
+def list_variable_income_entries(db: Session, month: str | None = None):
+    query = select(models.VariableIncomeEntry)
+
+    if month:
+        start, end, _ = _month_bounds(month)
+        query = query.where(
+            models.VariableIncomeEntry.date >= start,
+            models.VariableIncomeEntry.date <= end,
+        )
+
+    return db.scalars(
+        query.order_by(models.VariableIncomeEntry.date.desc(), models.VariableIncomeEntry.id.desc())
+    ).all()
+
+
+def create_variable_income_entry(db: Session, entry: schemas.VariableIncomeCreate):
+    record = models.VariableIncomeEntry(**entry.model_dump())
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def update_variable_income_entry(
+    db: Session,
+    entry_id: int,
+    entry: schemas.VariableIncomeUpdate,
+):
+    record = db.get(models.VariableIncomeEntry, entry_id)
+    if not record:
+        raise LookupError("Variable income entry not found.")
+
+    for field, value in entry.model_dump().items():
+        setattr(record, field, value)
+
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def delete_variable_income_entry(db: Session, entry_id: int):
+    record = db.get(models.VariableIncomeEntry, entry_id)
+    if not record:
+        raise LookupError("Variable income entry not found.")
+
+    db.delete(record)
+    db.commit()
+
+
 def list_bills(db: Session):
     return db.scalars(select(models.Bill).order_by(models.Bill.due_day.asc(), models.Bill.name.asc())).all()
 
@@ -252,18 +301,30 @@ def calculate_dashboard(db: Session, month: str | None = None):
     incomes = db.scalars(
         select(models.IncomeSource).where(models.IncomeSource.active.is_(True))
     ).all()
+    variable_income_entries = db.scalars(
+        select(models.VariableIncomeEntry).where(
+            models.VariableIncomeEntry.date >= start,
+            models.VariableIncomeEntry.date <= end,
+        )
+    ).all()
     bills = db.scalars(select(models.Bill)).all()
     categories = list_categories(db)
 
-    monthly_income = ZERO
+    recurring_monthly_income = ZERO
     for income in incomes:
         amount = Decimal(income.amount)
         if income.frequency == "weekly":
-            monthly_income += amount * Decimal("52") / Decimal("12")
+            recurring_monthly_income += amount * Decimal("52") / Decimal("12")
         elif income.frequency == "biweekly":
-            monthly_income += amount * Decimal("26") / Decimal("12")
+            recurring_monthly_income += amount * Decimal("26") / Decimal("12")
         else:
-            monthly_income += amount
+            recurring_monthly_income += amount
+
+    variable_income_total = ZERO
+    for entry in variable_income_entries:
+        variable_income_total += Decimal(entry.amount)
+
+    monthly_income = recurring_monthly_income + variable_income_total
 
     regular_bills_total = ZERO
     chapter13_payment_total = ZERO
@@ -307,6 +368,8 @@ def calculate_dashboard(db: Session, month: str | None = None):
         )
 
     total_bills = _normalize_money(regular_bills_total + chapter13_payment_total)
+    recurring_monthly_income = _normalize_money(recurring_monthly_income)
+    variable_income_total = _normalize_money(variable_income_total)
     monthly_income = _normalize_money(monthly_income)
     total_allowances = _normalize_money(total_allowances)
     total_spent = _normalize_money(total_spent)
@@ -318,6 +381,8 @@ def calculate_dashboard(db: Session, month: str | None = None):
 
     return {
         "month": label,
+        "recurring_monthly_income": recurring_monthly_income,
+        "variable_income_total": variable_income_total,
         "monthly_income": monthly_income,
         "total_bills": total_bills,
         "chapter13_payment_total": chapter13_payment_total,

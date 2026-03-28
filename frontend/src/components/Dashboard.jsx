@@ -43,7 +43,19 @@ export default function Dashboard({ dashboard, plan, month }) {
         <article className="metric-card">
           <div className="metric-label">Monthly Income</div>
           <div className="metric-value">{formatMoney(dashboard.monthly_income)}</div>
-          <div className="metric-note">Converted from active income sources.</div>
+          <div className="metric-note">Recurring income plus variable income recorded this month.</div>
+        </article>
+
+        <article className="metric-card">
+          <div className="metric-label">Recurring Income</div>
+          <div className="metric-value">{formatMoney(dashboard.recurring_monthly_income)}</div>
+          <div className="metric-note">Baseline monthly estimate from your regular income sources.</div>
+        </article>
+
+        <article className="metric-card">
+          <div className="metric-label">Variable Income</div>
+          <div className="metric-value">{formatMoney(dashboard.variable_income_total)}</div>
+          <div className="metric-note">Overtime, commissions, bonuses, and other extra pay this month.</div>
         </article>
 
         <article className="metric-card">

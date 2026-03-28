@@ -28,6 +28,7 @@ export default function App() {
   const [dashboard, setDashboard] = useState(null);
   const [plan, setPlan] = useState(null);
   const [incomes, setIncomes] = useState([]);
+  const [incomeAdjustments, setIncomeAdjustments] = useState([]);
   const [bills, setBills] = useState([]);
   const [categories, setCategories] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -43,6 +44,7 @@ export default function App() {
         dashboardData,
         planData,
         incomesData,
+        incomeAdjustmentsData,
         billsData,
         categoriesData,
         transactionsData,
@@ -50,6 +52,7 @@ export default function App() {
         api.getDashboard(month),
         api.getPlan(month),
         api.getIncomes(),
+        api.getIncomeAdjustments(month),
         api.getBills(),
         api.getCategories(),
         api.getTransactions(month),
@@ -58,6 +61,7 @@ export default function App() {
       setDashboard(dashboardData);
       setPlan(planData);
       setIncomes(incomesData);
+      setIncomeAdjustments(incomeAdjustmentsData);
       setBills(billsData);
       setCategories(categoriesData);
       setTransactions(transactionsData);
@@ -84,6 +88,21 @@ export default function App() {
 
   async function handleDeleteIncome(id) {
     await api.deleteIncome(id);
+    await loadData();
+  }
+
+  async function handleCreateIncomeAdjustment(payload) {
+    await api.createIncomeAdjustment(payload);
+    await loadData();
+  }
+
+  async function handleUpdateIncomeAdjustment(id, payload) {
+    await api.updateIncomeAdjustment(id, payload);
+    await loadData();
+  }
+
+  async function handleDeleteIncomeAdjustment(id) {
+    await api.deleteIncomeAdjustment(id);
     await loadData();
   }
 
@@ -223,9 +242,15 @@ export default function App() {
           {activeView === "income" ? (
             <IncomeList
               incomes={incomes}
+              incomeAdjustments={incomeAdjustments}
+              dashboard={dashboard}
+              month={month}
               onCreate={handleCreateIncome}
               onUpdate={handleUpdateIncome}
               onDelete={handleDeleteIncome}
+              onCreateAdjustment={handleCreateIncomeAdjustment}
+              onUpdateAdjustment={handleUpdateIncomeAdjustment}
+              onDeleteAdjustment={handleDeleteIncomeAdjustment}
             />
           ) : null}
 

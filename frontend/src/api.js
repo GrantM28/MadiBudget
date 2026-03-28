@@ -52,6 +52,22 @@ export const api = {
     request(`/incomes/${id}`, {
       method: "DELETE",
     }),
+  getIncomeAdjustments: (month) =>
+    request(`/income-adjustments?month=${encodeURIComponent(month)}`),
+  createIncomeAdjustment: (payload) =>
+    request("/income-adjustments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateIncomeAdjustment: (id, payload) =>
+    request(`/income-adjustments/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteIncomeAdjustment: (id) =>
+    request(`/income-adjustments/${id}`, {
+      method: "DELETE",
+    }),
   getBills: () => request("/bills"),
   createBill: (payload) =>
     request("/bills", {

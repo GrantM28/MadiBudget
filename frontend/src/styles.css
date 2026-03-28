@@ -284,7 +284,7 @@ button {
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
 }
 
@@ -442,6 +442,10 @@ button {
   gap: 12px;
 }
 
+.summary-stack-income {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .summary-tile {
   padding: 14px 15px;
   border-radius: 14px;
@@ -497,6 +501,10 @@ button {
 
 .sheet-entry-grid-categories {
   grid-template-columns: minmax(240px, 2fr) minmax(160px, 1fr) auto;
+}
+
+.sheet-entry-grid-variable-income {
+  grid-template-columns: minmax(240px, 2fr) minmax(150px, 1fr) minmax(160px, 1fr) auto;
 }
 
 .sheet-entry-grid-transactions {
@@ -656,6 +664,10 @@ button {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .summary-stack-income {
+    grid-template-columns: 1fr;
+  }
+
   .dashboard-lower {
     grid-template-columns: 1fr;
   }
@@ -713,6 +725,7 @@ button {
   .sheet-entry-grid-income,
   .sheet-entry-grid-categories,
   .sheet-entry-grid-bills,
+  .sheet-entry-grid-variable-income,
   .sheet-entry-grid-transactions {
     grid-template-columns: 1fr;
   }

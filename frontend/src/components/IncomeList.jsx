@@ -9,17 +9,37 @@ function formatMoney(value) {
   return currency.format(Number(value || 0));
 }
 
-const initialForm = {
+const initialIncomeForm = {
   name: "",
   amount: "",
   frequency: "biweekly",
   active: true,
 };
 
-export default function IncomeList({ incomes, onCreate, onUpdate, onDelete }) {
-  const [form, setForm] = useState(initialForm);
-  const [editingId, setEditingId] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
+const initialAdjustmentForm = {
+  description: "",
+  amount: "",
+  date: new Date().toISOString().slice(0, 10),
+};
+
+export default function IncomeList({
+  incomes,
+  incomeAdjustments,
+  dashboard,
+  month,
+  onCreate,
+  onUpdate,
+  onDelete,
+  onCreateAdjustment,
+  onUpdateAdjustment,
+  onDeleteAdjustment,
+}) {
+  const [incomeForm, setIncomeForm] = useState(initialIncomeForm);
+  const [adjustmentForm, setAdjustmentForm] = useState(initialAdjustmentForm);
+  const [editingIncomeId, setEditingIncomeId] = useState(null);
+  const [editingAdjustmentId, setEditingAdjustmentId] = useState(null);
+  const [submittingIncome, setSubmittingIncome] = useState(false);
+  const [submittingAdjustment, setSubmittingAdjustment] = useState(false);
   const [error, setError] = useState("");
 
   const sortedIncomes = useMemo(
@@ -27,15 +47,29 @@ export default function IncomeList({ incomes, onCreate, onUpdate, onDelete }) {
     [incomes],
   );
 
-  function resetForm() {
-    setForm(initialForm);
-    setEditingId(null);
+  const sortedAdjustments = useMemo(
+    () => [...incomeAdjustments].sort((a, b) => (a.date < b.date ? 1 : -1)),
+    [incomeAdjustments],
+  );
+
+  function resetIncomeForm() {
+    setIncomeForm(initialIncomeForm);
+    setEditingIncomeId(null);
     setError("");
   }
 
-  function startEdit(income) {
-    setEditingId(income.id);
-    setForm({
+  function resetAdjustmentForm() {
+    setAdjustmentForm({
+      ...initialAdjustmentForm,
+      date: new Date().toISOString().slice(0, 10),
+    });
+    setEditingAdjustmentId(null);
+    setError("");
+  }
+
+  function startIncomeEdit(income) {
+    setEditingIncomeId(income.id);
+    setIncomeForm({
       name: income.name,
       amount: String(income.amount),
       frequency: income.frequency,
@@ -44,31 +78,65 @@ export default function IncomeList({ incomes, onCreate, onUpdate, onDelete }) {
     setError("");
   }
 
-  async function handleSubmit(event) {
+  function startAdjustmentEdit(entry) {
+    setEditingAdjustmentId(entry.id);
+    setAdjustmentForm({
+      description: entry.description,
+      amount: String(entry.amount),
+      date: entry.date,
+    });
+    setError("");
+  }
+
+  async function handleIncomeSubmit(event) {
     event.preventDefault();
-    setSubmitting(true);
+    setSubmittingIncome(true);
     setError("");
 
     const payload = {
-      ...form,
-      amount: Number(form.amount),
+      ...incomeForm,
+      amount: Number(incomeForm.amount),
     };
 
     try {
-      if (editingId) {
-        await onUpdate(editingId, payload);
+      if (editingIncomeId) {
+        await onUpdate(editingIncomeId, payload);
       } else {
         await onCreate(payload);
       }
-      resetForm();
+      resetIncomeForm();
     } catch (submitError) {
       setError(submitError.message || "Unable to save income source.");
     } finally {
-      setSubmitting(false);
+      setSubmittingIncome(false);
     }
   }
 
-  async function handleDelete(income) {
+  async function handleAdjustmentSubmit(event) {
+    event.preventDefault();
+    setSubmittingAdjustment(true);
+    setError("");
+
+    const payload = {
+      ...adjustmentForm,
+      amount: Number(adjustmentForm.amount),
+    };
+
+    try {
+      if (editingAdjustmentId) {
+        await onUpdateAdjustment(editingAdjustmentId, payload);
+      } else {
+        await onCreateAdjustment(payload);
+      }
+      resetAdjustmentForm();
+    } catch (submitError) {
+      setError(submitError.message || "Unable to save variable income.");
+    } finally {
+      setSubmittingAdjustment(false);
+    }
+  }
+
+  async function handleDeleteIncome(income) {
     const confirmed = window.confirm(`Delete income source "${income.name}"?`);
     if (!confirmed) {
       return;
@@ -77,148 +145,327 @@ export default function IncomeList({ incomes, onCreate, onUpdate, onDelete }) {
     setError("");
     try {
       await onDelete(income.id);
-      if (editingId === income.id) {
-        resetForm();
+      if (editingIncomeId === income.id) {
+        resetIncomeForm();
       }
     } catch (deleteError) {
       setError(deleteError.message || "Unable to delete income source.");
     }
   }
 
+  async function handleDeleteAdjustment(entry) {
+    const confirmed = window.confirm(`Delete variable income entry "${entry.description}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    try {
+      await onDeleteAdjustment(entry.id);
+      if (editingAdjustmentId === entry.id) {
+        resetAdjustmentForm();
+      }
+    } catch (deleteError) {
+      setError(deleteError.message || "Unable to delete variable income.");
+    }
+  }
+
   return (
-    <section className="section-card section-card-sheet">
-      <div className="section-title-row">
-        <div>
-          <h2>Income Sources</h2>
-          <p className="section-subtitle">
-            Add, edit, and manage the pay sources used in monthly cash-flow calculations.
-          </p>
+    <div className="ledger-stack">
+      <section className="section-card">
+        <div className="section-title-row">
+          <div>
+            <h2>Income Summary</h2>
+            <p className="section-subtitle">
+              Separate steady recurring income from overtime, commissions, and other extra pay.
+            </p>
+          </div>
+          <span className="section-count">{month}</span>
         </div>
-        <span className="section-count">{incomes.length}</span>
-      </div>
 
-      <form className="sheet-entry-form" onSubmit={handleSubmit}>
-        <div className="sheet-entry-grid sheet-entry-grid-income">
-          <div className="field">
-            <label htmlFor="income-name">Source</label>
-            <input
-              id="income-name"
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-              placeholder="Main paycheck"
-              required
-            />
+        <div className="summary-stack summary-stack-income">
+          <div className="summary-tile">
+            <span className="summary-list-label">Recurring Monthly Income</span>
+            <strong>{formatMoney(dashboard?.recurring_monthly_income)}</strong>
           </div>
 
-          <div className="field">
-            <label htmlFor="income-amount">Amount</label>
-            <input
-              id="income-amount"
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.amount}
-              onChange={(event) => setForm({ ...form, amount: event.target.value })}
-              placeholder="1500.00"
-              required
-            />
+          <div className="summary-tile summary-tile-safe">
+            <span className="summary-list-label">Variable Income This Month</span>
+            <strong>{formatMoney(dashboard?.variable_income_total)}</strong>
           </div>
 
-          <div className="field">
-            <label htmlFor="income-frequency">Frequency</label>
-            <select
-              id="income-frequency"
-              value={form.frequency}
-              onChange={(event) => setForm({ ...form, frequency: event.target.value })}
-            >
-              <option value="weekly">Weekly</option>
-              <option value="biweekly">Biweekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
+          <div className="summary-tile">
+            <span className="summary-list-label">Total Income For Budget</span>
+            <strong>{formatMoney(dashboard?.monthly_income)}</strong>
           </div>
+        </div>
+      </section>
 
-          <div className="field">
-            <label htmlFor="income-active">Status</label>
-            <select
-              id="income-active"
-              value={form.active ? "active" : "inactive"}
-              onChange={(event) =>
-                setForm({ ...form, active: event.target.value === "active" })
-              }
-            >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
+      {error ? <div className="form-error form-error-inline">{error}</div> : null}
+
+      <section className="section-card section-card-sheet">
+        <div className="section-title-row">
+          <div>
+            <h2>Recurring Income Sources</h2>
+            <p className="section-subtitle">
+              Use these for the normal paycheck pattern you expect most months.
+            </p>
           </div>
+          <span className="section-count">{incomes.length}</span>
+        </div>
 
-          <div className="sheet-entry-actions">
-            <div className="action-group action-group-compact">
-              <button className="button" type="submit" disabled={submitting}>
-                {submitting ? "Saving..." : editingId ? "Save Changes" : "Add Income"}
-              </button>
-              {editingId ? (
-                <button
-                  className="button button-secondary"
-                  type="button"
-                  onClick={resetForm}
-                >
-                  Cancel
+        <form className="sheet-entry-form" onSubmit={handleIncomeSubmit}>
+          <div className="sheet-entry-grid sheet-entry-grid-income">
+            <div className="field">
+              <label htmlFor="income-name">Source</label>
+              <input
+                id="income-name"
+                value={incomeForm.name}
+                onChange={(event) => setIncomeForm({ ...incomeForm, name: event.target.value })}
+                placeholder="Main paycheck"
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="income-amount">Amount</label>
+              <input
+                id="income-amount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={incomeForm.amount}
+                onChange={(event) => setIncomeForm({ ...incomeForm, amount: event.target.value })}
+                placeholder="1500.00"
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="income-frequency">Frequency</label>
+              <select
+                id="income-frequency"
+                value={incomeForm.frequency}
+                onChange={(event) =>
+                  setIncomeForm({ ...incomeForm, frequency: event.target.value })
+                }
+              >
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Biweekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="income-active">Status</label>
+              <select
+                id="income-active"
+                value={incomeForm.active ? "active" : "inactive"}
+                onChange={(event) =>
+                  setIncomeForm({ ...incomeForm, active: event.target.value === "active" })
+                }
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+
+            <div className="sheet-entry-actions">
+              <div className="action-group action-group-compact">
+                <button className="button" type="submit" disabled={submittingIncome}>
+                  {submittingIncome
+                    ? "Saving..."
+                    : editingIncomeId
+                      ? "Save Changes"
+                      : "Add Income"}
                 </button>
-              ) : null}
+                {editingIncomeId ? (
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    onClick={resetIncomeForm}
+                  >
+                    Cancel
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
-        </div>
+        </form>
 
-        {error ? <div className="form-error">{error}</div> : null}
-      </form>
-
-      {sortedIncomes.length === 0 ? (
-        <p className="empty-state">No income sources added yet.</p>
-      ) : (
-        <div className="budget-table-wrap ledger-table-wrap">
-          <table className="transaction-table ledger-table">
-            <thead>
-              <tr>
-                <th className="row-number-column">#</th>
-                <th>Source</th>
-                <th>Frequency</th>
-                <th>Status</th>
-                <th>Amount</th>
-                <th className="actions-column">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedIncomes.map((income, index) => (
-                <tr key={income.id}>
-                  <td className="row-number-column">{index + 1}</td>
-                  <td className="budget-table-category">{income.name}</td>
-                  <td>{income.frequency}</td>
-                  <td>{income.active ? "Active" : "Inactive"}</td>
-                  <td>{formatMoney(income.amount)}</td>
-                  <td className="actions-column">
-                    <div className="action-group">
-                      <button
-                        className="table-action-button"
-                        type="button"
-                        onClick={() => startEdit(income)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="table-action-button table-action-button-danger"
-                        type="button"
-                        onClick={() => handleDelete(income)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+        {sortedIncomes.length === 0 ? (
+          <p className="empty-state">No recurring income sources added yet.</p>
+        ) : (
+          <div className="budget-table-wrap ledger-table-wrap">
+            <table className="transaction-table ledger-table">
+              <thead>
+                <tr>
+                  <th className="row-number-column">#</th>
+                  <th>Source</th>
+                  <th>Frequency</th>
+                  <th>Status</th>
+                  <th>Amount</th>
+                  <th className="actions-column">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sortedIncomes.map((income, index) => (
+                  <tr key={income.id}>
+                    <td className="row-number-column">{index + 1}</td>
+                    <td className="budget-table-category">{income.name}</td>
+                    <td>{income.frequency}</td>
+                    <td>{income.active ? "Active" : "Inactive"}</td>
+                    <td>{formatMoney(income.amount)}</td>
+                    <td className="actions-column">
+                      <div className="action-group">
+                        <button
+                          className="table-action-button"
+                          type="button"
+                          onClick={() => startIncomeEdit(income)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="table-action-button table-action-button-danger"
+                          type="button"
+                          onClick={() => handleDeleteIncome(income)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="section-card section-card-sheet">
+        <div className="section-title-row">
+          <div>
+            <h2>Variable Income This Month</h2>
+            <p className="section-subtitle">
+              Track overtime, commissions, bonuses, or other extra income only in the month it happens.
+            </p>
+          </div>
+          <span className="section-count">{incomeAdjustments.length}</span>
         </div>
-      )}
-    </section>
+
+        <form className="sheet-entry-form" onSubmit={handleAdjustmentSubmit}>
+          <div className="sheet-entry-grid sheet-entry-grid-variable-income">
+            <div className="field">
+              <label htmlFor="adjustment-description">Description</label>
+              <input
+                id="adjustment-description"
+                value={adjustmentForm.description}
+                onChange={(event) =>
+                  setAdjustmentForm({ ...adjustmentForm, description: event.target.value })
+                }
+                placeholder="Overtime - Harley"
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="adjustment-amount">Amount</label>
+              <input
+                id="adjustment-amount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={adjustmentForm.amount}
+                onChange={(event) =>
+                  setAdjustmentForm({ ...adjustmentForm, amount: event.target.value })
+                }
+                placeholder="275.00"
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="adjustment-date">Date</label>
+              <input
+                id="adjustment-date"
+                type="date"
+                value={adjustmentForm.date}
+                onChange={(event) =>
+                  setAdjustmentForm({ ...adjustmentForm, date: event.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div className="sheet-entry-actions">
+              <div className="action-group action-group-compact">
+                <button className="button" type="submit" disabled={submittingAdjustment}>
+                  {submittingAdjustment
+                    ? "Saving..."
+                    : editingAdjustmentId
+                      ? "Save Changes"
+                      : "Add Variable Income"}
+                </button>
+                {editingAdjustmentId ? (
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    onClick={resetAdjustmentForm}
+                  >
+                    Cancel
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </form>
+
+        {sortedAdjustments.length === 0 ? (
+          <p className="empty-state">No overtime, commissions, or extra income recorded for this month yet.</p>
+        ) : (
+          <div className="budget-table-wrap ledger-table-wrap">
+            <table className="transaction-table ledger-table">
+              <thead>
+                <tr>
+                  <th className="row-number-column">#</th>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Amount</th>
+                  <th className="actions-column">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedAdjustments.map((entry, index) => (
+                  <tr key={entry.id}>
+                    <td className="row-number-column">{index + 1}</td>
+                    <td>{entry.date}</td>
+                    <td className="budget-table-category">{entry.description}</td>
+                    <td>{formatMoney(entry.amount)}</td>
+                    <td className="actions-column">
+                      <div className="action-group">
+                        <button
+                          className="table-action-button"
+                          type="button"
+                          onClick={() => startAdjustmentEdit(entry)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="table-action-button table-action-button-danger"
+                          type="button"
+                          onClick={() => handleDeleteAdjustment(entry)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }

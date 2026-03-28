@@ -14,6 +14,15 @@ class IncomeSource(Base):
     active = Column(Boolean, nullable=False, default=True, server_default="true")
 
 
+class VariableIncomeEntry(Base):
+    __tablename__ = "variable_income_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    description = Column(String(255), nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)
+    date = Column(Date, nullable=False)
+
+
 class Bill(Base):
     __tablename__ = "bills"
 
