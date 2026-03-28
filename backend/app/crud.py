@@ -638,7 +638,7 @@ def calculate_dashboard(db: Session, month: str | None = None):
     )
     current_checking_balance = _normalize_money(Decimal(cash_position.current_balance))
     available_to_spend_right_now = _normalize_money(
-        min(projected_available_to_spend_right_now, current_checking_balance)
+        current_checking_balance + projected_available_to_spend_right_now
     )
 
     return {

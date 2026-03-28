@@ -56,8 +56,6 @@ export default function Dashboard({
   const totalSpent = Number(dashboard.total_spent_in_allowance_categories);
   const budgetUsagePercent =
     totalAllowances > 0 ? Math.max(0, (totalSpent / totalAllowances) * 100) : 0;
-  const checkingIsLimiter = checkingBalance < projectedAvailableNow;
-
   let statusLabel = "On track";
   let statusClass = "safe-positive";
   let statusMessage = "Current spending is still inside the monthly category plan.";
@@ -66,12 +64,12 @@ export default function Dashboard({
     statusLabel = "Over budget now";
     statusClass = "safe-negative";
     statusMessage =
-      "You have already spent beyond the money left after fixed expenses and remaining category allowances.";
-  } else if (checkingIsLimiter) {
-    statusLabel = "Checking is tight";
+      "Current checking plus the selected month's cash flow still is not enough to cover fixed expenses and remaining category allowances.";
+  } else if (projectedAvailableNow < 0) {
+    statusLabel = "Using checking cushion";
     statusClass = "safe-negative";
     statusMessage =
-      "The monthly plan may leave room later, but your checking balance is the tighter limit right now.";
+      "This month is short on its own, but your current checking balance is covering the gap right now.";
   } else if (overBudgetTotal > 0) {
     statusLabel = "Categories over budget";
     statusClass = "safe-negative";
@@ -145,8 +143,8 @@ export default function Dashboard({
           <p className="section-kicker">Overview</p>
           <h2 className="dashboard-title">Budget snapshot for {month}</h2>
           <p className="section-subtitle">
-            The dashboard now combines your month plan with the real checking balance you actually
-            have on hand.
+            The dashboard now starts with the checking balance you have on hand and then applies
+            the selected month's projected cash flow on top of it.
           </p>
         </div>
 
@@ -166,9 +164,9 @@ export default function Dashboard({
         <div className="dashboard-alert-copy">
           <p>{statusMessage}</p>
           <p>
-            Projected by plan: <strong>{formatMoney(dashboard.projected_available_to_spend_right_now)}</strong>
+            Current checking: <strong>{formatMoney(dashboard.current_checking_balance)}</strong>
             {" | "}
-            Checking balance: <strong>{formatMoney(dashboard.current_checking_balance)}</strong>
+            Month cash-flow delta: <strong>{formatMoney(dashboard.projected_available_to_spend_right_now)}</strong>
           </p>
         </div>
       </section>
@@ -393,7 +391,7 @@ export default function Dashboard({
             {formatMoney(dashboard.projected_available_to_spend_right_now)}
           </div>
           <div className="metric-note">
-            What the month math says before checking balance caps it.
+            What the selected month adds or subtracts before checking is applied.
           </div>
         </article>
 
@@ -403,7 +401,7 @@ export default function Dashboard({
             {formatMoney(dashboard.available_to_spend_right_now)}
           </div>
           <div className="metric-note">
-            This is the number to trust before spending anything else.
+            This is current checking plus the selected month's projected cash-flow impact.
           </div>
         </article>
       </div>
@@ -493,7 +491,7 @@ export default function Dashboard({
             </div>
 
             <div className="summary-tile">
-              <span className="summary-list-label">Projected Safe</span>
+              <span className="summary-list-label">Month Cash-Flow Delta</span>
               <strong>{formatMoney(plan.projected_available_to_spend_right_now)}</strong>
             </div>
 
