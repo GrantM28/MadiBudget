@@ -14,8 +14,17 @@ function currentMonthValue() {
   return `${year}-${month}`;
 }
 
+const navItems = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "transactions", label: "Transactions" },
+  { id: "bills", label: "Bills" },
+  { id: "income", label: "Income" },
+  { id: "categories", label: "Categories" },
+];
+
 export default function App() {
   const [month, setMonth] = useState(currentMonthValue());
+  const [activeView, setActiveView] = useState("dashboard");
   const [dashboard, setDashboard] = useState(null);
   const [plan, setPlan] = useState(null);
   const [incomes, setIncomes] = useState([]);
@@ -83,25 +92,50 @@ export default function App() {
     await loadData();
   }
 
+  const activeNav = navItems.find((item) => item.id === activeView);
+
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <div className="brand-block">
-          <div className="brand-mark">MB</div>
+    <div className="app-frame">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <div className="sidebar-logo">MB</div>
           <div>
-            <p className="app-kicker">MadiBudget</p>
-            <h1 className="app-title">Household budget workspace</h1>
-            <p className="app-subtitle">
-              Built to protect required bills, Chapter 13 obligations, and monthly
-              category limits before any extra spending happens.
-            </p>
+            <div className="sidebar-title">MadiBudget</div>
+            <div className="sidebar-subtitle">Household budgeting</div>
           </div>
         </div>
 
-        <div className="header-controls">
-          <div className="header-control-card">
+        <nav className="sidebar-nav" aria-label="Primary">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`sidebar-link ${activeView === item.id ? "active" : ""}`}
+              onClick={() => setActiveView(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar-footnote">
+          Track cash flow, protect bills, and stay inside category limits.
+        </div>
+      </aside>
+
+      <main className="app-main">
+        <header className="topbar">
+          <div>
+            <p className="section-kicker">Workspace</p>
+            <h1 className="topbar-title">{activeNav?.label || "Dashboard"}</h1>
+            <p className="topbar-subtitle">
+              Budget data for {month} with backend-driven balances and summaries.
+            </p>
+          </div>
+
+          <div className="topbar-controls">
             <label className="control-label" htmlFor="planning-month">
-              Planning month
+              Month
             </label>
             <input
               id="planning-month"
@@ -111,35 +145,37 @@ export default function App() {
               onChange={(event) => setMonth(event.target.value)}
             />
           </div>
+        </header>
 
-          <div className="header-status-card">
-            <span className="status-label">Source of truth</span>
-            <strong>Backend-driven budget</strong>
-            <span className="status-note">
-              Transactions, category balances, and safe-to-spend stay synced to {month}.
-            </span>
-          </div>
-        </div>
-      </header>
+        {error ? <div className="banner banner-error">{error}</div> : null}
+        {loading ? <div className="banner">Loading MadiBudget...</div> : null}
 
-      {error ? <div className="banner banner-error">{error}</div> : null}
-      {loading ? <div className="banner">Loading MadiBudget...</div> : null}
+        <section className="view-shell">
+          {activeView === "dashboard" ? (
+            <Dashboard dashboard={dashboard} plan={plan} month={month} />
+          ) : null}
 
-      <Dashboard dashboard={dashboard} plan={plan} month={month} />
+          {activeView === "transactions" ? (
+            <div className="view-grid view-grid-wide">
+              <TransactionForm
+                categories={categories}
+                onCreate={handleCreateTransaction}
+              />
+              <TransactionList transactions={transactions} month={month} />
+            </div>
+          ) : null}
 
-      <main className="workspace-grid">
-        <section className="stack-column stack-column-secondary">
-          <IncomeList incomes={incomes} onCreate={handleCreateIncome} />
-          <BillList bills={bills} onCreate={handleCreateBill} />
-          <CategoryList categories={categories} onCreate={handleCreateCategory} />
-        </section>
+          {activeView === "bills" ? (
+            <BillList bills={bills} onCreate={handleCreateBill} />
+          ) : null}
 
-        <section className="stack-column stack-column-primary">
-          <TransactionForm
-            categories={categories}
-            onCreate={handleCreateTransaction}
-          />
-          <TransactionList transactions={transactions} month={month} />
+          {activeView === "income" ? (
+            <IncomeList incomes={incomes} onCreate={handleCreateIncome} />
+          ) : null}
+
+          {activeView === "categories" ? (
+            <CategoryList categories={categories} onCreate={handleCreateCategory} />
+          ) : null}
         </section>
       </main>
     </div>

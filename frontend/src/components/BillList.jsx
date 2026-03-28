@@ -13,7 +13,6 @@ const initialForm = {
   name: "",
   amount: "",
   due_day: "",
-  type: "bill",
 };
 
 export default function BillList({ bills, onCreate }) {
@@ -32,6 +31,7 @@ export default function BillList({ bills, onCreate }) {
         amount: Number(form.amount),
         due_day: Number(form.due_day),
         recurring: true,
+        type: "bill",
       });
       setForm(initialForm);
     } catch (submitError) {
@@ -46,7 +46,7 @@ export default function BillList({ bills, onCreate }) {
       <div className="section-title-row">
         <div>
           <h2>Bills</h2>
-          <p className="section-subtitle">Track regular bills and your dedicated Chapter 13 payment.</p>
+          <p className="section-subtitle">Track monthly bills, loans, mortgage, utilities, and other obligations.</p>
         </div>
         <span className="section-count">{bills.length}</span>
       </div>
@@ -59,7 +59,7 @@ export default function BillList({ bills, onCreate }) {
               id="bill-name"
               value={form.name}
               onChange={(event) => setForm({ ...form, name: event.target.value })}
-              placeholder="Electricity"
+              placeholder="Mortgage"
               required
             />
           </div>
@@ -73,38 +73,24 @@ export default function BillList({ bills, onCreate }) {
               step="0.01"
               value={form.amount}
               onChange={(event) => setForm({ ...form, amount: event.target.value })}
-              placeholder="210.00"
+              placeholder="1200.00"
               required
             />
           </div>
         </div>
 
-        <div className="form-grid">
-          <div className="field">
-            <label htmlFor="bill-due-day">Due Day</label>
-            <input
-              id="bill-due-day"
-              type="number"
-              min="1"
-              max="31"
-              value={form.due_day}
-              onChange={(event) => setForm({ ...form, due_day: event.target.value })}
-              placeholder="15"
-              required
-            />
-          </div>
-
-          <div className="field">
-            <label htmlFor="bill-type">Type</label>
-            <select
-              id="bill-type"
-              value={form.type}
-              onChange={(event) => setForm({ ...form, type: event.target.value })}
-            >
-              <option value="bill">Regular Bill</option>
-              <option value="chapter13">Chapter 13 Payment</option>
-            </select>
-          </div>
+        <div className="field">
+          <label htmlFor="bill-due-day">Due Day</label>
+          <input
+            id="bill-due-day"
+            type="number"
+            min="1"
+            max="31"
+            value={form.due_day}
+            onChange={(event) => setForm({ ...form, due_day: event.target.value })}
+            placeholder="1"
+            required
+          />
         </div>
 
         {error ? <div className="form-error">{error}</div> : null}
@@ -124,9 +110,7 @@ export default function BillList({ bills, onCreate }) {
             <li className="list-item" key={bill.id}>
               <div className="list-item-main">
                 <div className="list-item-title">{bill.name}</div>
-                <div className="list-item-subtitle">
-                  Due day {bill.due_day} - {bill.type === "chapter13" ? "Chapter 13" : "Regular bill"}
-                </div>
+                <div className="list-item-subtitle">Due day {bill.due_day}</div>
               </div>
               <div className="list-item-amount">{formatMoney(bill.amount)}</div>
             </li>
