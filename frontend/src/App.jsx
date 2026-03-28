@@ -156,7 +156,7 @@ export default function App() {
           ) : null}
 
           {activeView === "transactions" ? (
-            <div className="view-grid view-grid-wide">
+            <div className="ledger-stack">
               <TransactionForm
                 categories={categories}
                 onCreate={handleCreateTransaction}
